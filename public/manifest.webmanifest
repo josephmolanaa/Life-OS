@@ -1,0 +1,16 @@
+{
+  "name": "Life OS Finance Tracker",
+  "short_name": "Finance OS",
+  "start_url": "/finance",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#020617",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
