@@ -113,7 +113,7 @@ export default function ActivityPage() {
 
   return (
     <Shell title="ActivityWatch Module" quickFab={false}>
-      <div className="mx-auto flex flex-col gap-4">
+      <div style={{ display: 'grid', gap: '20px' }}>
         <header className="card" style={{ padding: '20px' }}>
           <p className="muted" style={{ letterSpacing: '.32em', fontSize: '11px', textTransform: 'uppercase', margin: 0 }}>ActivityWatch</p>
           <h1 className="big" style={{ margin: '8px 0 6px', fontSize: '28px' }}>Raw Activity Feed</h1>

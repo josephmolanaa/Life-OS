@@ -55,7 +55,7 @@ export default function ActivityRulesPage() {
 
   return (
     <Shell title="Activity Rules" quickFab={false}>
-      <div className="mx-auto flex flex-col gap-4">
+      <div style={{ display: 'grid', gap: '20px' }}>
         <header className="card" style={{ padding: '20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
