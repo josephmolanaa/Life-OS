@@ -41,3 +41,7 @@ Jalankan ActivityWatch lokal di http://localhost:5600 untuk data live.
 
 Kalau ActivityWatch offline, Life OS tampilkan fallback aman tanpa crash.
 
+
+## Todos
+Daily todos memakai /api/todos dan fallback lokal saat Supabase belum siap.
+
