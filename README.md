@@ -33,3 +33,5 @@ npm run dev
 
 - ActivityWatch: /activitywatch baca app/window lokal.
 
+- Habits: /habits checklist harian.
+
