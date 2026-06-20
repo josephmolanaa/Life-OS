@@ -28,7 +28,7 @@ export function QuickFab({ transfer, income, expense }: { transfer: string; inco
   }, [open]);
 
   useEffect(() => {
-    setDate(new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10));
+    setTimeout(() => setDate(new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)), 0);
   }, []);
 
   return <div ref={rootRef} className={`mobileTransactionFab ${open ? 'isOpen' : ''}`} style={{display: 'block'}}>

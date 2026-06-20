@@ -10,7 +10,7 @@ function formatAxis(value: number) {
   return `Rp ${compactRupiah.format(value)}`;
 }
 
-function formatTooltip(value: any) {
+function formatTooltip(value: unknown) {
   return rupiah.format(Number(Array.isArray(value) ? value[0] : (value ?? 0)));
 }
 

@@ -28,7 +28,7 @@ export function PrivacyProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       const stored = localStorage.getItem('finance-privacy-hidden');
-      if (stored === 'true') setHidden(true);
+      if (stored === 'true') { setTimeout(() => setHidden(true), 0); }
     } catch (e) {}
   }, []);
 

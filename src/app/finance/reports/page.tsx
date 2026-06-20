@@ -41,13 +41,14 @@ export default async function Reports() {
   if (!rows.some(([month]) => month === currentMonthValue())) rows.unshift([currentMonthValue(), { income: 0, expense: 0 }]);
 
   let rollingEndBalance = currentBalance;
-  const monthRows = rows.map(([month, total]) => {
+  const monthRows = [];
+  for (const [month, total] of rows) {
     const balance = total.income - total.expense;
     const endBalance = rollingEndBalance;
     const startBalance = endBalance - balance;
     rollingEndBalance = startBalance;
-    return { month, ...total, balance, startBalance, endBalance };
-  });
+    monthRows.push({ month, ...total, balance, startBalance, endBalance });
+  }
 
   return <Shell title={c.reportsTitle}>
     <div className="reportTabs"><Link className="reportTab" href="/finance/reports/realtime">Realtime</Link><span className="reportTab active">Monthly</span><Link className="reportTab" href="/finance/reports/custom">Custom</Link></div>

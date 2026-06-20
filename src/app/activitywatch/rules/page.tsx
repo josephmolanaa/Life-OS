@@ -1,0 +1,98 @@
+"use client";
+
+import { useEffect, useState, type FormEvent } from 'react';
+import { Shell } from '@/components/finance/layout';
+import type { ActivityRule } from '@/lib/activitywatch-types';
+
+const categoryOptions = ['work', 'play', 'learn', 'admin', 'social', 'health', 'uncategorized'] as const;
+const emptyForm = { match_type: 'app' as 'app' | 'title', match_value: '', display_name: '', category: 'work' };
+
+export default function ActivityRulesPage() {
+  const [rules, setRules] = useState<ActivityRule[]>([]);
+  const [form, setForm] = useState(emptyForm);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/activity-rules').then((response) => response.json()).then(setRules).catch(() => setRules([]));
+  }, []);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    const method = editingId ? 'PUT' : 'POST';
+    const body = editingId ? { id: editingId, ...form } : form;
+    const response = await fetch('/api/activity-rules', {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const rule = await response.json();
+    if (rule?.id) {
+      setRules((current) => editingId ? current.map((item) => item.id === rule.id ? rule : item) : [rule, ...current]);
+      setForm(emptyForm);
+      setEditingId(null);
+    }
+  };
+
+  const startEdit = (rule: ActivityRule) => {
+    setEditingId(rule.id);
+    setForm({ match_type: rule.match_type, match_value: rule.match_value, display_name: rule.display_name, category: rule.category });
+  };
+
+  const remove = async (id: string) => {
+    await fetch('/api/activity-rules', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+    setRules((current) => current.filter((rule) => rule.id !== id));
+    if (editingId === id) {
+      setEditingId(null);
+      setForm(emptyForm);
+    }
+  };
+
+  return (
+    <Shell title="Activity Rules" quickFab={false}>
+      <div className="mx-auto flex flex-col gap-4">
+        <header className="card" style={{ padding: '20px' }}>
+          <p className="muted" style={{ letterSpacing: '.32em', fontSize: '11px', textTransform: 'uppercase', margin: 0 }}>ActivityWatch</p>
+          <h1 className="big" style={{ margin: '8px 0 6px', fontSize: '28px' }}>Rules Mapping</h1>
+          <p className="muted" style={{ margin: 0 }}>Rename app dan override category tanpa ubah data mentah ActivityWatch.</p>
+        </header>
+
+        <form className="card" onSubmit={submit} style={{ padding: '20px', display: 'grid', gap: '12px' }}>
+          <select value={form.match_type} onChange={(event) => setForm({ ...form, match_type: event.target.value as 'app' | 'title' })}>
+            <option value="app">Match app</option>
+            <option value="title">Match title</option>
+          </select>
+          <input placeholder="Roblox" value={form.match_value} onChange={(event) => setForm({ ...form, match_value: event.target.value })} />
+          <input placeholder="Roblox Studio" value={form.display_name} onChange={(event) => setForm({ ...form, display_name: event.target.value })} />
+          <select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>
+            {categoryOptions.map((category) => <option key={category} value={category}>{category}</option>)}
+          </select>
+          <div className="row">
+            <button className="btn" type="submit">{editingId ? 'Update rule' : 'Add rule'}</button>
+            {editingId && <button className="btn ghost" type="button" onClick={() => { setEditingId(null); setForm(emptyForm); }}>Cancel edit</button>}
+          </div>
+        </form>
+
+        <section className="grid" style={{ gap: '10px' }}>
+          {rules.map((rule) => (
+            <article key={rule.id} className="card" style={{ padding: '16px' }}>
+              <div className="row">
+                <div>
+                  <h2 style={{ fontSize: '16px', fontWeight: 600, margin: 0 }}>{rule.display_name}</h2>
+                  <p className="muted" style={{ fontSize: '12px', margin: '4px 0 0' }}>{rule.match_type}: {rule.match_value} ? {rule.category}</p>
+                </div>
+                <div className="row">
+                  <button className="btn ghost" type="button" onClick={() => startEdit(rule)}>Edit</button>
+                  <button className="btn ghost" type="button" onClick={() => remove(rule.id)}>Delete</button>
+                </div>
+              </div>
+            </article>
+          ))}
+        </section>
+      </div>
+    </Shell>
+  );
+}

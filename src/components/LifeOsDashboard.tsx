@@ -91,7 +91,7 @@ export function LifeOsDashboard({ financeSummary }: LifeOsDashboardProps) {
         if (!evRes.ok) throw new Error();
         const events = await evRes.json();
         const durations: Record<string, number> = {};
-        events.forEach((event: any) => {
+        events.forEach((event: { data?: { app?: string; window?: string }; duration?: number }) => {
           const app = event.data.app || 'Unknown';
           const minutes = Math.max(1, Math.round((event.duration || 0) / 60));
           durations[app] = (durations[app] || 0) + minutes;

@@ -16,8 +16,12 @@ export function ChromeControls() {
   const [lang, setLang] = useState<'en' | 'id'>('en');
 
   useEffect(() => {
-    setDarkMode(document.documentElement.classList.contains('dark-mode'));
-    setLang(getCookie('finance-lang') === 'id' ? 'id' : 'en');
+    const dark = document.documentElement.classList.contains('dark-mode');
+    const lng = getCookie('finance-lang') === 'id' ? 'id' : 'en';
+    setTimeout(() => {
+      setDarkMode(dark);
+      setLang(lng);
+    }, 0);
   }, []);
 
   function applyTheme(next: boolean) {

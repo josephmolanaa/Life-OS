@@ -1,4 +1,4 @@
-﻿import Link from 'next/link';
+import Link from 'next/link';
 import { ChevronRight, Download } from 'lucide-react';
 import { ExpensePie } from '@/components/finance/charts';
 import { Shell } from '@/components/finance/layout';
@@ -29,7 +29,7 @@ function groupItems(transactions: Awaited<ReturnType<typeof requireFinance>>['tr
     acc[name] ??= { name, value: 0, color: tx.categories?.color ?? colors[Object.keys(acc).length % colors.length] };
     acc[name].value += Number(tx.amount);
     return acc;
-  }, {})).sort((a, b) => b.value - a.value).map((item, index) => ({ ...item, color: colors[index % colors.length] }));
+  }, {})).sort((a, b) => b.value - a.value).map((item) => ({ ...item, color: colors[index % colors.length] }));
 }
 
 function ProgressList({ title, items, total }: { title: string; items: { name: string; value: number; color: string }[]; total: number }) {
@@ -79,7 +79,7 @@ export default async function ReportMonthDetail({ params, searchParams }: { para
       {view === 'chart' && <>
         <ExpensePie data={expenseCategories}/>
         <div className="reportLegend">
-          {expenseCategories.map((item, index) => {
+          {expenseCategories.map((item) => {
             const percent = t.expense > 0 ? Math.round(item.value / t.expense * 100) : 0;
             return <div className="reportLegendRow" key={item.name}><span style={{background:item.color}}>{percent} %</span><b>{item.name}</b><strong><PrivacyAmount value={number.format(item.value)}/></strong></div>;
           })}
