@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from 'react';
+import Link from 'next/link';
+import { ArrowLeft } from 'lucide-react';
 import { Shell } from '@/components/finance/layout';
 import type { ActivityRule } from '@/lib/activitywatch-types';
 
@@ -55,19 +57,24 @@ export default function ActivityRulesPage() {
     <Shell title="Activity Rules" quickFab={false}>
       <div className="mx-auto flex flex-col gap-4">
         <header className="card" style={{ padding: '20px' }}>
-          <p className="muted" style={{ letterSpacing: '.32em', fontSize: '11px', textTransform: 'uppercase', margin: 0 }}>ActivityWatch</p>
-          <h1 className="big" style={{ margin: '8px 0 6px', fontSize: '28px' }}>Rules Mapping</h1>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <p className="muted" style={{ letterSpacing: '.32em', fontSize: '11px', textTransform: 'uppercase', margin: 0 }}>ActivityWatch</p>
+              <h1 className="big" style={{ margin: '8px 0 6px', fontSize: '28px' }}>Rules Mapping</h1>
+            </div>
+            <Link className="btn ghost" href="/activitywatch" style={{ gap: '6px' }}><ArrowLeft size={16} /> Back</Link>
+          </div>
           <p className="muted" style={{ margin: 0 }}>Rename app dan override category tanpa ubah data mentah ActivityWatch.</p>
         </header>
 
         <form className="card" onSubmit={submit} style={{ padding: '20px', display: 'grid', gap: '12px' }}>
-          <select value={form.match_type} onChange={(event) => setForm({ ...form, match_type: event.target.value as 'app' | 'title' })}>
+          <select className="input" value={form.match_type} onChange={(event) => setForm({ ...form, match_type: event.target.value as 'app' | 'title' })}>
             <option value="app">Match app</option>
             <option value="title">Match title</option>
           </select>
-          <input placeholder="Roblox" value={form.match_value} onChange={(event) => setForm({ ...form, match_value: event.target.value })} />
-          <input placeholder="Roblox Studio" value={form.display_name} onChange={(event) => setForm({ ...form, display_name: event.target.value })} />
-          <select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>
+          <input className="input" placeholder="Roblox" value={form.match_value} onChange={(event) => setForm({ ...form, match_value: event.target.value })} />
+          <input className="input" placeholder="Roblox Studio" value={form.display_name} onChange={(event) => setForm({ ...form, display_name: event.target.value })} />
+          <select className="input" value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>
             {categoryOptions.map((category) => <option key={category} value={category}>{category}</option>)}
           </select>
           <div className="row">

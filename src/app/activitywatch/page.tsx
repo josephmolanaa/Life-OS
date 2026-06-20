@@ -130,8 +130,8 @@ export default function ActivityPage() {
           <form className="card" onSubmit={saveQuickRule} style={{ padding: '20px', display: 'grid', gap: '12px', border: '1px solid var(--accent)' }}>
             <h2 style={{ fontSize: '16px', fontWeight: 600, margin: 0 }}>Quick Rule: {selectedApp}</h2>
             <p className="muted" style={{ margin: 0 }}>Klik item ini buat assign name/category. Rule bakal overwrite kalau app sama sudah ada.</p>
-            <input placeholder={`Display Name (e.g. ${selectedApp})`} value={form.display_name} onChange={(e) => setForm({ ...form, display_name: e.target.value })} />
-            <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+            <input className="input" placeholder={`Display Name (e.g. ${selectedApp})`} value={form.display_name} onChange={(e) => setForm({ ...form, display_name: e.target.value })} />
+            <select className="input" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
               {categoryOptions.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
             </select>
             <div className="row">
