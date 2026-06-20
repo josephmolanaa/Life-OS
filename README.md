@@ -57,3 +57,7 @@ Route lama /finance/activity redirect ke /activitywatch.
 ## Push Notes
 Perubahan modularisasi dipisah jadi commit kecil tanpa empty commit.
 
+
+## Next
+Next work: ActivityWatch rule mapping untuk rename app dan category override.
+
