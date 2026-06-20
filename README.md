@@ -35,3 +35,7 @@ npm run dev
 
 - Habits: /habits checklist harian.
 
+
+## ActivityWatch
+Jalankan ActivityWatch lokal di http://localhost:5600 untuk data live.
+
