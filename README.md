@@ -45,3 +45,7 @@ Kalau ActivityWatch offline, Life OS tampilkan fallback aman tanpa crash.
 ## Todos
 Daily todos memakai /api/todos dan fallback lokal saat Supabase belum siap.
 
+
+## Database
+Migration awal ada di supabase/migrations/001_create_todos_table.sql.
+
