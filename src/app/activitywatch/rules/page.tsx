@@ -74,10 +74,11 @@ export default function ActivityRulesPage() {
           </select>
           <input className="input" placeholder="Roblox" value={form.match_value} onChange={(event) => setForm({ ...form, match_value: event.target.value })} />
           <input className="input" placeholder="Roblox Studio" value={form.display_name} onChange={(event) => setForm({ ...form, display_name: event.target.value })} />
-          <select className="input" value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>
-            {categoryOptions.map((category) => <option key={category} value={category}>{category}</option>)}
-          </select>
-          <div className="row">
+          <input className="input" placeholder="Category (e.g. game, work, play)" list="categories-list" value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })} />
+          <datalist id="categories-list">
+            {categoryOptions.map((category) => <option key={category} value={category} />)}
+          </datalist>
+          <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
             <button className="btn" type="submit">{editingId ? 'Update rule' : 'Add rule'}</button>
             {editingId && <button className="btn ghost" type="button" onClick={() => { setEditingId(null); setForm(emptyForm); }}>Cancel edit</button>}
           </div>
