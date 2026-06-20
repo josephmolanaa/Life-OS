@@ -53,3 +53,7 @@ Migration awal ada di supabase/migrations/001_create_todos_table.sql.
 ## Routes
 Route lama /finance/activity redirect ke /activitywatch.
 
+
+## Push Notes
+Perubahan modularisasi dipisah jadi commit kecil tanpa empty commit.
+
