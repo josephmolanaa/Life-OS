@@ -29,3 +29,5 @@ npm run dev
 ## Modules
 - Dashboard: / overview semua modul.
 
+- Finance: /finance khusus uang, wallet, budget, reports.
+
