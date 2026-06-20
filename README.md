@@ -31,3 +31,5 @@ npm run dev
 
 - Finance: /finance khusus uang, wallet, budget, reports.
 
+- ActivityWatch: /activitywatch baca app/window lokal.
+
