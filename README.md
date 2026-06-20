@@ -39,3 +39,5 @@ npm run dev
 ## ActivityWatch
 Jalankan ActivityWatch lokal di http://localhost:5600 untuk data live.
 
+Kalau ActivityWatch offline, Life OS tampilkan fallback aman tanpa crash.
+
