@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { signOut } from '@/lib/actions';
 import { ChromeControls, SidebarToggleButton } from './chrome-controls';
-import { ArrowLeftRight, BarChart3, CreditCard, Home, Landmark, Settings, Activity, LayoutGrid } from 'lucide-react';
+import { ArrowLeftRight, BarChart3, CreditCard, Settings, Activity, LayoutGrid, ListChecks } from 'lucide-react';
 import { QuickFab } from './quick-fab';
 
 export function Topbar({ title }: { title: string }) {
@@ -25,11 +25,11 @@ export function Topbar({ title }: { title: string }) {
 
 export function BottomNav() {
   const pathname = usePathname();
-  
   const navItems = [
     { href: '/', label: 'Dashboard', Icon: LayoutGrid },
     { href: '/finance', label: 'Finance', Icon: CreditCard },
-    { href: '/finance/activity', label: 'ActivityWatch', Icon: Activity },
+    { href: '/activitywatch', label: 'ActivityWatch', Icon: Activity },
+    { href: '/habits', label: 'Habits', Icon: ListChecks },
     { href: '/finance/reports', label: 'Reports', Icon: BarChart3 },
     { href: '/finance/loans', label: 'Loans', Icon: ArrowLeftRight },
     { href: '/finance/settings', label: 'Settings', Icon: Settings },
@@ -38,19 +38,11 @@ export function BottomNav() {
   return <nav className="bottom">
     <div className="navHead"><div className="navBrand"><span>Life OS</span></div><SidebarToggleButton /></div>
     {navItems.map(({ href, label, Icon }) => {
-      // Handle active state
       const isActive = href === '/' ? pathname === '/' : pathname.startsWith(href);
-      return (
-        <Link 
-          key={href} 
-          href={href}
-          className={isActive ? 'active' : ''}
-          style={isActive ? { background: 'var(--surface2)', color: 'var(--text)' } : {}}
-        >
-          <span className="navIcon" style={isActive ? { background: 'var(--accent)', color: 'var(--accentText)' } : {}}><Icon size={18} strokeWidth={2.2} aria-hidden="true" /></span>
-          <span className="navLabel">{label}</span>
-        </Link>
-      );
+      return <Link key={href} href={href} className={isActive ? 'active' : ''} style={isActive ? { background: 'var(--surface2)', color: 'var(--text)' } : {}}>
+        <span className="navIcon" style={isActive ? { background: 'var(--accent)', color: 'var(--accentText)' } : {}}><Icon size={18} strokeWidth={2.2} aria-hidden="true" /></span>
+        <span className="navLabel">{label}</span>
+      </Link>;
     })}
   </nav>;
 }

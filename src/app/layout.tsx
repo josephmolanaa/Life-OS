@@ -7,8 +7,8 @@ export const metadata: Metadata = {
   description: 'Personal command center for finance, activity, habits, and progress.',
   manifest: '/manifest.webmanifest',
   icons: {
-    icon: '/icon.png',
-    apple: '/icon.png',
+    icon: '/icon.svg',
+    apple: '/icon.svg',
   },
 };
 
