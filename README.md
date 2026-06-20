@@ -49,3 +49,7 @@ Daily todos memakai /api/todos dan fallback lokal saat Supabase belum siap.
 ## Database
 Migration awal ada di supabase/migrations/001_create_todos_table.sql.
 
+
+## Routes
+Route lama /finance/activity redirect ke /activitywatch.
+
