@@ -25,3 +25,7 @@ npm run dev
 - `/finance/btc` DCA log
 - `/finance/net-worth` snapshots
 - `/finance/activity` ActivityWatch raw feed
+
+## Modules
+- Dashboard: / overview semua modul.
+
