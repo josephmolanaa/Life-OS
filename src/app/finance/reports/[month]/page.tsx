@@ -29,7 +29,7 @@ function groupItems(transactions: Awaited<ReturnType<typeof requireFinance>>['tr
     acc[name] ??= { name, value: 0, color: tx.categories?.color ?? colors[Object.keys(acc).length % colors.length] };
     acc[name].value += Number(tx.amount);
     return acc;
-  }, {})).sort((a, b) => b.value - a.value).map((item) => ({ ...item, color: colors[index % colors.length] }));
+  }, {})).sort((a, b) => b.value - a.value).map((item, index) => ({ ...item, color: colors[index % colors.length] }));
 }
 
 function ProgressList({ title, items, total }: { title: string; items: { name: string; value: number; color: string }[]; total: number }) {

@@ -3,6 +3,10 @@
 import { useEffect, useState } from 'react';
 import { DailyQuestCard } from './life-os-daily-quest';
 import { ModuleCards } from './life-os-module-cards';
+import { DashboardCard, type DashboardCardProps } from './DashboardCard';
+import { Briefcase, HeartPulse, Users, Flame } from 'lucide-react';
+import { PrivacyAmount } from './finance/privacy-amount';
+import { PrivacyToggleButton } from './finance/privacy-toggle-button';
 
 type LifeOsDashboardProps = {
   financeSummary: {
@@ -51,17 +55,6 @@ function getInitialContribs(): ContribCell[] {
   return Array.from({ length: 35 }, (_, index) => ({ date: new Date(Date.now() - (34 - index) * 24 * 60 * 60 * 1000).toDateString(), count: 0 }));
 }
 
-function Pillars({ totalBalance }: { totalBalance: number }) {
-  const pillars = [
-    { name: 'Financial', val: totalBalance > 0 ? 'Active' : 'Empty', desc: `Rp ${totalBalance.toLocaleString('id-ID')}`, pct: totalBalance > 0 ? 100 : 0 },
-    { name: 'Career / AI', val: 'No data', desc: 'Connect tracker later', pct: 0 },
-    { name: 'Physique', val: 'No data', desc: 'Connect habits later', pct: 0 },
-    { name: 'Social Skills', val: 'No data', desc: 'Connect journal later', pct: 0 },
-  ];
-
-  return <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>{pillars.map((pillar) => <article key={pillar.name} className="card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}><div><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}><span className="muted" style={{ fontSize: '11px', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '1px' }}>{pillar.name}</span><span className="pill" style={{ margin: 0, padding: '3px 8px', fontSize: '11px', background: 'var(--surface2)', border: 'none', color: 'var(--text)' }}>{pillar.val}</span></div><div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text)', marginBottom: '16px', letterSpacing: '-0.3px' }}>{pillar.desc}</div></div><div style={{ background: 'var(--border2)', height: '4px', borderRadius: '2px', overflow: 'hidden' }}><div style={{ background: 'var(--green)', width: `${pillar.pct}%`, height: '100%' }} /></div></article>)}</div>;
-}
-
 function ConsistencyGraph({ contribs }: { contribs: ContribCell[] }) {
   const colors = ['var(--surface2)', 'rgba(76, 175, 80, 0.25)', 'rgba(76, 175, 80, 0.45)', 'rgba(76, 175, 80, 0.70)', 'var(--green)'];
   return <section className="card" style={{ padding: '24px', display: 'flex', flexDirection: 'column' }}><div style={{ marginBottom: '18px' }}><h2 style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>Consistency Graph</h2><p className="muted" style={{ margin: '2px 0 0', fontSize: '12px' }}>5-week habit intensity</p></div><div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px 0' }}><div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '6px', maxWidth: '240px', width: '100%' }}>{contribs.map((cell) => { const level = Math.min(4, cell.count); return <div key={cell.date} title={`${cell.date}: ${cell.count} tasks done`} style={{ aspectRatio: '1', borderRadius: '4px', background: colors[level], border: level === 0 ? '1px solid var(--border)' : 'none' }} />; })}</div></div></section>;
@@ -92,7 +85,7 @@ export function LifeOsDashboard({ financeSummary }: LifeOsDashboardProps) {
         const events = await evRes.json();
         const durations: Record<string, number> = {};
         events.forEach((event: { data?: { app?: string; window?: string }; duration?: number }) => {
-          const app = event.data.app || 'Unknown';
+          const app = event.data?.app || 'Unknown';
           const minutes = Math.max(1, Math.round((event.duration || 0) / 60));
           durations[app] = (durations[app] || 0) + minutes;
         });
@@ -125,19 +118,32 @@ export function LifeOsDashboard({ financeSummary }: LifeOsDashboardProps) {
       return next.slice(-35);
     });
   };
+  
+  const pillars: DashboardCardProps[] = [
+    { title: 'Financial', value: <PrivacyAmount value={`Rp ${financeSummary.totalBalance.toLocaleString('id-ID')}`} />, icon: <Briefcase />, action: <PrivacyToggleButton />, link: '/finance' },
+    { title: 'Career / AI', value: '75%', change: '+5% this week', changeType: 'positive', icon: <Briefcase />, link: '/pillars/career' },
+    { title: 'Physique', value: 'Active', icon: <HeartPulse />, link: '/pillars/physique' },
+    { title: 'Social', value: 'Good', icon: <Users />, link: '/pillars/social' },
+    { title: 'Discipline', value: 'Strong', icon: <Flame />, link: '/pillars/discipline' },
+  ];
 
   return (
-    <div style={{ display: 'grid', gap: '20px', width: '100%', maxWidth: '960px', margin: '0 auto' }}>
-      <section className="card" style={{ padding: '24px' }}>
+    <div style={{ display: 'grid', gap: '24px', width: '100%' }}>
+      <section>
         <span className="muted" style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '2px', fontWeight: 600 }}>Life OS Central</span>
         <h1 style={{ margin: '8px 0 6px', fontSize: '32px', fontWeight: 700, color: 'var(--text)', border: 'none', padding: 0 }}>Joseph Command Center</h1>
-        <p className="muted" style={{ margin: 0, fontSize: '14px', lineHeight: 1.6, maxWidth: '680px' }}>Satu pusat kendali kehidupan. Finance sync via Supabase. Habit tracker live. ActivityWatch optional.</p>
+        <p className="muted" style={{ margin: 0, fontSize: '14px', lineHeight: 1.6, maxWidth: '680px' }}>Your integrated life dashboard. Financials, habits, and productivity in one place.</p>
       </section>
-      <Pillars totalBalance={financeSummary.totalBalance} />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px' }}>
+        {pillars.map(p => <DashboardCard key={p.title} {...p} />)}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
         <DailyQuestCard todos={todos} onToggle={handleToggle} />
         <ConsistencyGraph contribs={contribs} />
       </div>
+      
       <ModuleCards financeSummary={{ income: financeSummary.income, expense: financeSummary.expense }} awStatus={awStatus} awApps={awApps} />
     </div>
   );

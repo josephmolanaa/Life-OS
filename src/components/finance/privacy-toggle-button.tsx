@@ -5,8 +5,21 @@ import { usePrivacy } from '@/components/finance/privacy-context';
 
 export function PrivacyToggleButton() {
   const { hidden, toggleHidden } = usePrivacy();
-
-  return <button className="balanceToggle" type="button" aria-label={hidden ? 'Show balances' : 'Hide balances'} onClick={toggleHidden}>
-    {hidden ? <EyeOff size={24} strokeWidth={2.4}/> : <Eye size={24} strokeWidth={2.4}/>} 
-  </button>;
+  return (
+    <button
+      onClick={(e) => { e.preventDefault(); toggleHidden(); }}
+      title={hidden ? 'Show amounts' : 'Hide amounts'}
+      style={{
+        background: 'none',
+        border: 'none',
+        cursor: 'pointer',
+        color: 'var(--muted)',
+        padding: '2px',
+        display: 'flex',
+        alignItems: 'center',
+      }}
+    >
+      {hidden ? <Eye size={16} /> : <EyeOff size={16} />}
+    </button>
+  );
 }
