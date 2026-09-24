@@ -47,16 +47,25 @@ export default function HabitsPage() {
     setTodos(nextTodos);
     await fetch(`/api/todos/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ done: checked }) });
   };
+  const handleUpdate = async (id: string, label: string) => {
+    const nextTodos = todos.map((todo) => todo.id === id ? { ...todo, label } : todo);
+    setTodos(nextTodos);
+    await fetch(`/api/todos/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label }),
+    });
+  };
 
   return (
     <Shell title="Habits" quickFab={false}>
-      <div className="mx-auto flex flex-col gap-4">
-        <header className="card" style={{ padding: '20px' }}>
+      <div className="mx-auto flex flex-col" style={{ display: "flex", flexDirection: "column", width: "100%", gap: "clamp(20px, 3vw, 28px)" }}>
+        <header className="card" style={{ padding: "clamp(24px, 4vw, 32px)" }}>
           <p className="muted" style={{ letterSpacing: '.32em', fontSize: '11px', textTransform: 'uppercase', margin: 0 }}>Habits</p>
           <h1 className="big" style={{ margin: '8px 0 6px', fontSize: '28px' }}>Daily Todo List</h1>
           <p className="muted" style={{ margin: 0 }}>Checklist harian terpisah dari dashboard utama.</p>
         </header>
-        <DailyQuestCard todos={todos} onToggle={handleToggle} />
+        <DailyQuestCard todos={todos} onToggle={handleToggle} onUpdate={handleUpdate} />
       </div>
     </Shell>
   );
