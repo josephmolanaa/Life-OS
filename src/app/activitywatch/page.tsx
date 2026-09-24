@@ -6,23 +6,24 @@ import { Shell } from '@/components/finance/layout';
 import { applyActivityRules } from '@/lib/activitywatch-rules';
 import type { ActivityRule, ActivityWatchItem } from '@/lib/activitywatch-types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { getLang, copy, type Lang, type Translation } from '@/lib/i18n';
 
 const categoryOptions = ['work', 'play', 'learn', 'admin', 'social', 'health', 'uncategorized'] as const;
 const rangeOptions = [
-  { value: '4h', label: '4 Jam' },
-  { value: '1d', label: '1 Hari' },
-  { value: '1w', label: '1 Minggu' },
-  { value: '1m', label: '1 Bulan' }
+  { value: '4h', label: '4H' },
+  { value: '1d', label: '24H' },
+  { value: '1w', label: '7D' },
+  { value: '1m', label: '1M' }
 ] as const;
 
 const categoryEmojis: Record<string, string> = {
-  work: '💼 work',
-  play: '🎮 play',
-  learn: '📚 learn',
-  admin: '⚙️ admin',
-  social: '💬 social',
-  health: '🍏 health',
-  uncategorized: '❓ uncategorized'
+  work: '\u{1F4BC} work',
+  play: '\u{1F3AE} play',
+  learn: '\u{1F4DA} learn',
+  admin: '\u{2699}\u{FE0F} admin',
+  social: '\u{1F4AC} social',
+  health: '\u{1F34F} health',
+  uncategorized: '\u{2753} uncategorized'
 };
 
 const categoryColors: Record<string, string> = {
@@ -41,7 +42,7 @@ const fallbackItems: ActivityWatchItem[] = [
   { app: 'WhatsApp', window: 'Chat with team', minutes: 12, started: '11:40' },
 ];
 
-function formatMinutes(minutes: number) {
+function formatMinutes(minutes: number, _range?: string) {
   if (minutes >= 24 * 60) {
     const d = Math.floor(minutes / (24 * 60));
     const h = Math.floor((minutes % (24 * 60)) / 60);
@@ -66,6 +67,8 @@ async function loadRules(): Promise<ActivityRule[]> {
 }
 
 export default function ActivityPage() {
+  const [lang, setLang] = useState<Lang>('en');
+  const [t, setT] = useState<Translation>(copy.en);
   const [items, setItems] = useState<ActivityWatchItem[]>(fallbackItems);
   const [status, setStatus] = useState('Fallback data loaded');
   const [rules, setRules] = useState<ActivityRule[]>([]);
@@ -76,7 +79,11 @@ export default function ActivityPage() {
 
   const [hostname, setHostname] = useState('Unknown');
   const [hourlyActivity, setHourlyActivity] = useState([]);
-  const [range, setRange] = useState('1m');
+  const [range, setRange] = useState('1d');
+  const [appTimeframe, setAppTimeframe] = useState('1d');
+  const [windowTimeframe, setWindowTimeframe] = useState('1d');
+  const [appData, setAppData] = useState([]);
+  const [windowData, setWindowData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState<string>('all');
@@ -131,6 +138,40 @@ export default function ActivityPage() {
     };
     void load();
   }, [selectedDate, range]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const fetchAppData = async () => {
+      try {
+        const response = await fetch(`/api/activitywatch-data?date=${selectedDate}&range=${appTimeframe}`, { signal: controller.signal });
+        if (response.ok) {
+          const data = await response.json();
+          setAppData(data.items || []);
+        }
+      } catch (e: any) {
+        if (e.name !== 'AbortError') setAppData([]);
+      }
+    };
+    void fetchAppData();
+    return () => controller.abort();
+  }, [selectedDate, appTimeframe]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const fetchWindowData = async () => {
+      try {
+        const response = await fetch(`/api/activitywatch-data?date=${selectedDate}&range=${windowTimeframe}`, { signal: controller.signal });
+        if (response.ok) {
+          const data = await response.json();
+          setWindowData(data.items || []);
+        }
+      } catch (e: any) {
+        if (e.name !== 'AbortError') setWindowData([]);
+      }
+    };
+    void fetchWindowData();
+    return () => controller.abort();
+  }, [selectedDate, windowTimeframe]);
 
   const mappedItems = useMemo(() => applyActivityRules(items, rules), [items, rules]);
   const totalMinutes = useMemo(() => mappedItems.reduce((sum, item) => sum + item.minutes, 0), [mappedItems]);
@@ -362,32 +403,32 @@ export default function ActivityPage() {
         {/* Dashboard Metrics Row */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
           <div className="card" style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <div style={{ fontSize: '28px', background: 'rgba(59, 130, 246, 0.1)', padding: '12px', borderRadius: '12px' }}>⏱️</div>
+            <div style={{ fontSize: '28px', background: 'rgba(59, 130, 246, 0.1)', padding: '12px', borderRadius: '12px' }}>&#x23F1;&#xFE0F;</div>
             <div>
               <p className="muted" style={{ margin: 0, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Time Active</p>
-              <h3 style={{ margin: '4px 0 0', fontSize: '20px', fontWeight: 700 }}>{formatMinutes(totalMinutes)}</h3>
+              <h3 style={{ margin: '4px 0 0', fontSize: '20px', fontWeight: 700 }}>{formatMinutes(totalMinutes, range)}</h3>
             </div>
           </div>
           <div className="card" style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <div style={{ fontSize: '28px', background: 'rgba(16, 185, 129, 0.1)', padding: '12px', borderRadius: '12px' }}>💻</div>
+            <div style={{ fontSize: '28px', background: 'rgba(16, 185, 129, 0.1)', padding: '12px', borderRadius: '12px' }}>&#x1F4BB;</div>
             <div>
               <p className="muted" style={{ margin: 0, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Device Host</p>
               <h3 style={{ margin: '4px 0 0', fontSize: '20px', fontWeight: 700 }}>{hostname}</h3>
             </div>
           </div>
           <div className="card" style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <div style={{ fontSize: '28px', background: 'rgba(245, 158, 11, 0.1)', padding: '12px', borderRadius: '12px' }}>🏷️</div>
+            <div style={{ fontSize: '28px', background: 'rgba(245, 158, 11, 0.1)', padding: '12px', borderRadius: '12px' }}>&#x1F3F7;&#xFE0F;</div>
             <div>
               <p className="muted" style={{ margin: 0, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Categorized</p>
               <h3 style={{ margin: '4px 0 0', fontSize: '20px', fontWeight: 700 }}>{100 - uncategorizedPercentage}%</h3>
             </div>
           </div>
           <div className="card" style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <div style={{ fontSize: '28px', background: uncategorizedPercentage > 30 ? 'rgba(239, 68, 68, 0.1)' : 'rgba(100, 116, 139, 0.1)', padding: '12px', borderRadius: '12px' }}>❓</div>
+            <div style={{ fontSize: '28px', background: uncategorizedPercentage > 30 ? 'rgba(239, 68, 68, 0.1)' : 'rgba(100, 116, 139, 0.1)', padding: '12px', borderRadius: '12px' }}>&#x2753;</div>
             <div>
               <p className="muted" style={{ margin: 0, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Uncategorized</p>
               <h3 style={{ margin: '4px 0 0', fontSize: '20px', fontWeight: 700, color: uncategorizedPercentage > 30 ? '#ef4444' : 'inherit' }}>
-                {formatMinutes(uncategorizedMinutes)}
+                {formatMinutes(uncategorizedMinutes, range)}
               </h3>
             </div>
           </div>
@@ -459,13 +500,7 @@ export default function ActivityPage() {
                       <YAxis type="number" hide />
                       <Tooltip 
                         labelStyle={{ color: '#1A1917' }} 
-                        labelFormatter={(label, payload) => {
-                          const activePayload = payload && payload[0];
-                          if (activePayload && activePayload.payload.dateStr) {
-                            return activePayload.payload.dateStr;
-                          }
-                          return selectedDate + " " + label;
-                        }} 
+                        labelFormatter={(label) => selectedDate + " " + String(label)}
                         formatter={(val, name) => {
                           if (!val || Number(val) === 0) return [null, ""];
                           return [formatMinutes(Number(val)), categoryEmojis[name as string] || (name as string)];
@@ -487,7 +522,11 @@ export default function ActivityPage() {
 
             {/* Top Apps List */}
             <section className="card" style={{ padding: '20px' }}>
-              <h2 style={{ fontSize: '16px', fontWeight: 600, margin: '0 0 16px 0' }}>Top Applications</h2>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h2 style={{ fontSize: '16px', fontWeight: 600, margin: 0 }}>Top Applications</h2>
+                
+
+              </div>
               <div style={{ display: 'grid', gap: '14px' }}>
                 {loading ? (
                   [1, 2, 3].map(n => <div key={n} className="skeleton" style={{ height: '36px' }} />)
@@ -496,7 +535,7 @@ export default function ActivityPage() {
                     <div key={app.name} style={{ display: 'grid', gap: '6px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', alignItems: 'center' }}>
                         <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '75%' }}>{app.name}</span>
-                        <span className="muted" style={{ fontSize: '12px' }}>{formatMinutes(app.minutes)} ({app.totalPct}%)</span>
+                        <span className="muted" style={{ fontSize: '12px' }}>{formatMinutes(app.minutes, appTimeframe)} ({app.totalPct}%)</span>
                       </div>
                       <div className="progress-track">
                         <div className="progress-bar" style={{ width: `${app.percentage}%`, background: categoryColors[app.category] || 'var(--accent, #3b82f6)' }} />
@@ -509,7 +548,11 @@ export default function ActivityPage() {
 
             {/* Top Windows List */}
             <section className="card" style={{ padding: '20px' }}>
-              <h2 style={{ fontSize: '16px', fontWeight: 600, margin: '0 0 16px 0' }}>Top Active Windows</h2>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h2 style={{ fontSize: '16px', fontWeight: 600, margin: 0 }}>Top Active Windows</h2>
+                
+
+              </div>
               <div style={{ display: 'grid', gap: '14px' }}>
                 {loading ? (
                   [1, 2, 3].map(n => <div key={n} className="skeleton" style={{ height: '36px' }} />)
@@ -518,7 +561,7 @@ export default function ActivityPage() {
                     <div key={win.name} style={{ display: 'grid', gap: '6px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', alignItems: 'center' }}>
                         <span style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '75%', fontSize: '12px' }} className="muted">{win.name}</span>
-                        <span className="muted" style={{ fontSize: '11px' }}>{formatMinutes(win.minutes)} ({win.totalPct}%)</span>
+                        <span className="muted" style={{ fontSize: '11px' }}>{formatMinutes(win.minutes, windowTimeframe)} ({win.totalPct}%)</span>
                       </div>
                       <div className="progress-track">
                         <div className="progress-bar" style={{ width: `${win.percentage}%`, background: '#38bdf8' }} />
@@ -561,12 +604,12 @@ export default function ActivityPage() {
 
             {/* Quick Actions / Link Card */}
             <section className="card" style={{ padding: '20px', display: 'grid', gap: '12px' }}>
-              <h2 style={{ fontSize: '15px', fontWeight: 600, margin: 0 }}>Category Rules</h2>
+              <h2 style={{ fontSize: '15px', fontWeight: 600, margin: 0 }}>{t.categoryRules}</h2>
               <p className="muted" style={{ margin: 0, fontSize: '12px' }}>
-                Atur rule pencocokan otomatis di rules engine. Rules engine akan memetakan raw feed ke kategori yang sesuai.
+                {t.categoryRulesDesc}
               </p>
               <Link className="pill" href="/activitywatch/rules" style={{ textAlign: 'center', fontWeight: 'bold', display: 'block', padding: '10px' }}>
-                Manage Rules Engine
+                {t.manageRulesEngine}
               </Link>
             </section>
           </div>
@@ -581,7 +624,7 @@ export default function ActivityPage() {
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', width: '100%', maxWidth: '600px' }}>
               <input
                 className="input"
-                placeholder="🔍 Search app atau window title..."
+                placeholder="&#x1F50D; Search app atau window title..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 style={{ flex: 1, minWidth: '180px' }}
@@ -648,7 +691,7 @@ export default function ActivityPage() {
                           {item.started}
                         </td>
                         <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: 'bold', color: 'var(--green)' }}>
-                          {formatMinutes(item.minutes)}
+                          {formatMinutes(item.minutes, range)}
                         </td>
                         <td style={{ padding: '12px 10px', textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
                           <select
@@ -689,3 +732,13 @@ export default function ActivityPage() {
     </Shell>
   );
 }
+
+
+
+
+
+
+
+
+
+
