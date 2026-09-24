@@ -1,16 +1,10 @@
-{
-  "name": "Life OS Finance Tracker",
-  "short_name": "Finance OS",
-  "start_url": "/finance",
+﻿{
+  "name": "Life OS",
+  "short_name": "Life OS",
+  "start_url": "/dashboard",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#020617",
-  "theme_color": "#020617",
-  "icons": [
-    {
-      "src": "/icon.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
-    }
-  ]
+  "background_color": "#121212",
+  "theme_color": "#121212",
+  "icons": [{"src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable"}]
 }
