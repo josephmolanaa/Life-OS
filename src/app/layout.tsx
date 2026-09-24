@@ -1,6 +1,7 @@
-import type { Metadata, Viewport } from 'next';
+﻿import type { Metadata } from 'next';
 import './globals.css';
 import { PrivacyProvider } from '@/components/finance/privacy-context';
+import { PwaRegister } from '@/components/pwa-register';
 
 export const metadata: Metadata = {
   title: 'Life OS',
@@ -10,14 +11,10 @@ export const metadata: Metadata = {
     icon: '/icon.svg',
     apple: '/icon.svg',
   },
+  themeColor: '#121212',
 };
 
-export const viewport: Viewport = {
-  width: 'device-width',
-  initialScale: 1,
-  maximumScale: 1,
-  themeColor: '#020617',
-};
+
 
 const themeScript = `
 (function(){
@@ -42,6 +39,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body>
+        <PwaRegister />
         <PrivacyProvider>
           {children}
         </PrivacyProvider>
@@ -49,3 +47,4 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     </html>
   );
 }
+
