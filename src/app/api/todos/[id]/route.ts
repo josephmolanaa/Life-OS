@@ -1,16 +1,21 @@
-import { NextResponse } from 'next/server';
+﻿import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
-export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function PUT(request: Request, { params }: { params: any }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { done } = await request.json();
+  const body = await request.json();
   const { id } = await params;
+  
+  const updateData: any = {};
+  if (body.done !== undefined) updateData.done = body.done;
+  if (body.label !== undefined) updateData.label = body.label;
+
   const { data, error } = await supabase
     .from('todos')
-    .update({ done })
+    .update(updateData)
     .eq('id', id)
     .eq('user_id', user.id)
     .select()
@@ -20,15 +25,16 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   return NextResponse.json(data);
 }
 
-export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(request: Request, { params }: { params: any }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  const { id } = await params;
   const { error } = await supabase
     .from('todos')
     .delete()
-    .eq('id', (await params).id)
+    .eq('id', id)
     .eq('user_id', user.id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

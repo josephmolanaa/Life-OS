@@ -16,7 +16,23 @@ export async function GET() {
 
   const { data, error } = await supabase.from('todos').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
   if (error) return NextResponse.json(fallbackTodos);
-  return NextResponse.json(data || fallbackTodos);
+
+  // Rollover at 00:00
+  const now = new Date();
+  const todayStr = now.toDateString();
+
+  const updatedData = await Promise.all((data || []).map(async (todo) => {
+    const updatedAt = new Date(todo.updated_at || todo.created_at || Date.now());
+    const todoDayStr = updatedAt.toDateString();
+
+    if (todoDayStr !== todayStr && todo.done) {
+      await supabase.from('todos').update({ done: false }).eq('id', todo.id);
+      return { ...todo, done: false };
+    }
+    return todo;
+  }));
+
+  return NextResponse.json(updatedData || fallbackTodos);
 }
 
 export async function POST(request: Request) {
