@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -17,9 +17,14 @@ import {
   HeartPulse,
   Flame,
   Wallet,
+  ChevronDown,
+  ChevronRight,
+  BookOpen,
+  FileText,
+  Calendar
 } from 'lucide-react';
 import { QuickFab } from './quick-fab';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 const navGroups = [
   {
@@ -41,15 +46,23 @@ const navGroups = [
     items: [
       { href: '/activitywatch', label: 'Activity', Icon: Activity },
       { href: '/habits', label: 'Habits', Icon: ListChecks },
+      { href: '/diary', label: 'Diary', Icon: BookOpen },
     ],
   },
   {
     title: 'Pillars',
     items: [
-      { href: '/pillars/career', label: 'Career', Icon: BrainCircuit },
-      { href: '/pillars/physique', label: 'Physique', Icon: HeartPulse },
-      { href: '/pillars/social', label: 'Social', Icon: Users },
-      { href: '/pillars/discipline', label: 'Discipline', Icon: Flame },
+      { href: '/career', label: 'Career', Icon: BrainCircuit },
+      { href: '/physique', label: 'Physique', Icon: HeartPulse },
+      { href: '/social', label: 'Social', Icon: Users },
+      { href: '/discipline', label: 'Discipline', Icon: Flame },
+    ],
+  },
+  {
+    title: 'Study',
+    items: [
+      { href: '/study/jadwal', label: 'Jadwal', Icon: Calendar },
+      { href: '/study/rps', label: 'RPS', Icon: FileText },
     ],
   },
   {
@@ -78,28 +91,48 @@ export function Topbar({ title }: { title: string }) {
 
 export function BottomNav() {
   const pathname = usePathname();
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    const saved = localStorage.getItem('sidebar_collapsed_groups');
+    if (saved) setCollapsedGroups(JSON.parse(saved));
+  }, []);
+
+  const toggleGroup = (title: string) => {
+    const next = { ...collapsedGroups, [title]: !collapsedGroups[title] };
+    setCollapsedGroups(next);
+    localStorage.setItem('sidebar_collapsed_groups', JSON.stringify(next));
+  };
 
   return <nav className="bottom">
     <div className="navHead"><div className="navBrand"><span>Life OS</span></div><SidebarToggleButton /></div>
-    {navGroups.map(group => (
-      <div key={group.title} className="nav-group">
-        <h2 className="nav-group-title">{group.title}</h2>
-        {group.items.map(({ href, label, Icon }) => {
-          const isActive = href === '/' ? pathname === '/' : pathname.startsWith(href);
-          return <Link key={href} href={href} className={`nav-item ${isActive ? 'active' : ''}`}>
-            <span className="nav-icon"><Icon size={18} strokeWidth={2.2} aria-hidden="true" /></span>
-            <span className="nav-label">{label}</span>
-          </Link>;
-        })}
-      </div>
-    ))}
+    {navGroups.map(group => {
+      const isCollapsed = !!collapsedGroups[group.title];
+      return (
+        <div key={group.title} className="nav-group">
+          <h2 
+            className="nav-group-title" 
+            onClick={() => toggleGroup(group.title)}
+          >
+            <span>{group.title}</span>
+            {isCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+          </h2>
+          {!isCollapsed && group.items.map(({ href, label, Icon }) => {
+            const isActive = href === '/' ? pathname === '/' : pathname.startsWith(href);
+            return <Link key={href} href={href} className={`nav-item ${isActive ? 'active' : ''}`}>
+              <span className="nav-icon"><Icon size={18} strokeWidth={2.2} aria-hidden="true" /></span>
+              <span className="nav-label">{label}</span>
+            </Link>;
+          })}
+        </div>
+      );
+    })}
   </nav>;
 }
 
 export function Shell({ title, children, quickFab = true }: { title: string; children: React.ReactNode; quickFab?: boolean }) {
   
   useEffect(() => {
-    // Sync body class with html class for legacy compatibility
     const observer = new MutationObserver(() => {
       if (document.documentElement.classList.contains('sidebar-collapsed')) {
         document.body.classList.add('aside');
@@ -129,6 +162,7 @@ export function Shell({ title, children, quickFab = true }: { title: string; chi
         .nav-item.active { background-color: var(--accent); color: var(--accentText, #fff); }
         .nav-icon { margin-right: 0.75rem; transition: margin 0.2s ease; }
         .nav-label { font-size: 0.875rem; font-weight: 500; }
+        
         .nav-group-title {
             font-size: 0.7rem;
             font-weight: 600;
@@ -137,12 +171,20 @@ export function Shell({ title, children, quickFab = true }: { title: string; chi
             letter-spacing: 0.1em;
             padding: 0 1rem;
             margin-bottom: 0.75rem;
+            user-select: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .nav-group-title:hover {
+            color: var(--text);
         }
 
         html.sidebar-collapsed .nav-group-title,
         html.sidebar-collapsed .nav-label,
         html.sidebar-collapsed .navBrand span {
-          display: none;
+          display: none !important;
         }
         html.sidebar-collapsed .nav-item {
           justify-content: center;
@@ -233,3 +275,10 @@ function QuickFabSlot() {
 export function SummaryCard({ label, value, tone, helper }: { label: string; value: string; tone?: 'positive' | 'negative'; helper?: string }) {
   return <div className="card summary"><div className="muted">{label}</div><div className={`big ${tone ?? ''}`}>{value}</div>{helper && <small className="muted">{helper}</small>}</div>;
 }
+
+
+
+
+
+
+
