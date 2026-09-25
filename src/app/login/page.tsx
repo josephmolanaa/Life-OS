@@ -28,15 +28,13 @@ export default function LoginPage() {
       if (error) setError(error.message);
       else setMessage('Registration successful! Please check your email.');
     } else {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-      const result = await response.json();
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
       setLoading(false);
-      if (!response.ok) setError(result.error ?? 'Login gagal.');
-      else window.location.assign('/finance');
+      if (error) setError(error.message);
+      else {
+        await supabase.auth.getSession();
+        window.location.replace('/finance');
+      }
     }
   };
 
@@ -147,6 +145,7 @@ export default function LoginPage() {
     </main>
   );
 }
+
 
 
 
