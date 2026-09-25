@@ -1,12 +1,38 @@
-﻿import { redirect } from 'next/navigation';
+﻿import { headers } from 'next/headers';
+import { redirect } from 'next/navigation';
 import { createClient } from './supabase/server';
 import { monthBounds } from './finance';
 import type { BtcDcaLog, Budget, Category, Loan, NetWorthSnapshot, Transaction, Transfer, Wallet } from './types';
 
+function readAuthSession(cookieHeader: string) {
+  const projectRef = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).hostname.split('.')[0];
+  const cookiePrefix = `sb-${projectRef}-auth-token`;
+  const chunks = cookieHeader
+    .split(';')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.startsWith(`${cookiePrefix}=`) || entry.startsWith(`${cookiePrefix}.`))
+    .sort((left, right) => left.localeCompare(right))
+    .map((entry) => entry.slice(entry.indexOf('=') + 1));
+  if (!chunks.length) return null;
+
+  try {
+    let value = decodeURIComponent(chunks.join(''));
+    if (value.startsWith('base64-')) value = Buffer.from(value.slice(7), 'base64url').toString();
+    return JSON.parse(value) as { access_token?: string; refresh_token?: string };
+  } catch {
+    return null;
+  }
+}
+
 export async function requireFinanceUser() {
   const supabase = await createClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session?.user) return { supabase, user: session.user };
+  const cookieHeader = (await headers()).get('cookie') ?? '';
+  const session = readAuthSession(cookieHeader);
+
+  if (session?.access_token && session.refresh_token) {
+    const { data, error } = await supabase.auth.setSession({ access_token: session.access_token, refresh_token: session.refresh_token });
+    if (!error && data.user) return { supabase, user: data.user };
+  }
 
   const { data: { user } } = await supabase.auth.getUser();
   if (user) return { supabase, user };
@@ -62,5 +88,7 @@ export function totals(data: Awaited<ReturnType<typeof requireFinance>>) {
   const savingRate = income > 0 ? cashflow / income * 100 : 0;
   return { income, expense, totalBalance, cashflow, savingRate };
 }
+
+
 
 
