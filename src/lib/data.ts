@@ -5,11 +5,11 @@ import type { BtcDcaLog, Budget, Category, Loan, NetWorthSnapshot, Transaction, 
 
 export async function requireFinanceUser() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (user) return { supabase, user };
-
   const { data: { session } } = await supabase.auth.getSession();
   if (session?.user) return { supabase, user: session.user };
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user) return { supabase, user };
 
   redirect('/login');
 }
@@ -62,4 +62,5 @@ export function totals(data: Awaited<ReturnType<typeof requireFinance>>) {
   const savingRate = income > 0 ? cashflow / income * 100 : 0;
   return { income, expense, totalBalance, cashflow, savingRate };
 }
+
 
