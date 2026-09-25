@@ -34,5 +34,7 @@ export async function POST(request: Request) {
 
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) return NextResponse.json({ error: error.message }, { status: 401 });
+  await new Promise((resolve) => setTimeout(resolve, 25));
   return response;
 }
+
