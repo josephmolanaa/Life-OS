@@ -1,4 +1,6 @@
 ﻿import type { Metadata } from 'next';
+
+export const dynamic = 'force-dynamic';
 import './globals.css';
 import { PrivacyProvider } from '@/components/finance/privacy-context';
 import { PwaRegister } from '@/components/pwa-register';
@@ -47,4 +49,5 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     </html>
   );
 }
+
 
