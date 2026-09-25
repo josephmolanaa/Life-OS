@@ -32,10 +32,27 @@ export async function POST(request: Request) {
     },
   );
 
+  let signedInResolve: () => void = () => {};
+  const signedIn = new Promise<void>((resolve) => { signedInResolve = resolve; });
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+    if (event === 'SIGNED_IN') {
+      setTimeout(() => {
+        subscription.unsubscribe();
+        signedInResolve();
+      }, 0);
+    }
+  });
+
   const { error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) return NextResponse.json({ error: error.message }, { status: 401 });
-  await new Promise((resolve) => setTimeout(resolve, 25));
+  if (error) {
+    subscription.unsubscribe();
+    return NextResponse.json({ error: error.message }, { status: 401 });
+  }
+
+  await Promise.race([
+    signedIn,
+    new Promise<void>((resolve) => setTimeout(resolve, 500)),
+  ]);
+  response.headers.set('Cache-Control', 'private, no-store');
   return response;
 }
-
-
