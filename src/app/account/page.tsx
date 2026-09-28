@@ -13,10 +13,10 @@ const translations = {
     displayName: 'Display Name',
     email: 'Email Address',
     emailHint: 'This email is used for login and receiving important notifications.',
-    avatar: 'Avatar URL',
-    avatarHint: 'Paste an external image URL (e.g., from Imgur, Gravatar)',
     password: 'Change Password',
     passwordHint: 'Leave empty if you do not want to change password now. Minimum 6 characters.',
+    avatarClick: 'Click to change avatar',
+    avatarPrompt: 'Paste image URL',
     cancel: 'Cancel',
     save: 'Save Changes',
     saving: 'Saving...',
@@ -31,10 +31,10 @@ const translations = {
     displayName: 'Nama Tampilan',
     email: 'Alamat Email',
     emailHint: 'Email ini digunakan untuk login dan menerima notifikasi penting.',
-    avatar: 'URL Avatar',
-    avatarHint: 'Tempel URL gambar eksternal (misalnya dari Imgur, Gravatar)',
     password: 'Ubah Password',
     passwordHint: 'Biarkan kosong jika Anda tidak ingin mengubah password saat ini. Minimal 6 karakter.',
+    avatarClick: 'Klik untuk ubah avatar',
+    avatarPrompt: 'Tempel URL gambar',
     cancel: 'Batal',
     save: 'Simpan Perubahan',
     saving: 'Menyimpan...',
@@ -99,6 +99,13 @@ export default function AccountPage() {
     }
   }
 
+  function handleAvatarClick() {
+    const url = prompt(t.avatarPrompt);
+    if (url?.trim()) {
+      setAvatarUrl(url.trim());
+    }
+  }
+
   const initial = displayName ? displayName[0].toUpperCase() : email ? email[0].toUpperCase() : '?';
 
   return (
@@ -106,8 +113,9 @@ export default function AccountPage() {
       <style dangerouslySetInnerHTML={{ __html: `
         .account-container { max-width: 680px; margin: 0 auto; display: grid; gap: 24px; }
         .account-header { display: flex; align-items: center; gap: 24px; padding: 24px; background: var(--card-bg, var(--surface)); border: 1px solid var(--border); border-radius: 16px; }
-        .account-avatar { width: 88px; height: 88px; border-radius: 50%; background: var(--surface2); border: 2px solid var(--border2); display: grid; place-items: center; font-size: 36px; font-weight: 700; color: var(--text); box-shadow: 0 4px 12px rgba(0,0,0,0.05); flex-shrink: 0; overflow: hidden; }
-        .account-avatar img { width: 100%; height: 100%; object-fit: cover; }
+        .account-avatar-btn { width: 88px; height: 88px; border-radius: 50%; background: var(--surface2); border: 2px solid var(--border2); display: grid; place-items: center; font-size: 36px; font-weight: 700; color: var(--text); box-shadow: 0 4px 12px rgba(0,0,0,0.05); flex-shrink: 0; overflow: hidden; cursor: pointer; transition: all 0.2s; padding: 0; }
+        .account-avatar-btn:hover { border-color: var(--text); box-shadow: 0 6px 16px rgba(0,0,0,0.1); }
+        .account-avatar-btn img { width: 100%; height: 100%; object-fit: cover; }
         .account-title h2 { margin: 0 0 6px 0; font-size: 24px; letter-spacing: -0.02em; }
         .account-title p { margin: 0; color: var(--text2); font-size: 15px; }
         
@@ -149,9 +157,14 @@ export default function AccountPage() {
             </div>}
 
             <header className="account-header">
-              <div className="account-avatar">
+              <button
+                type="button"
+                className="account-avatar-btn"
+                onClick={handleAvatarClick}
+                title={t.avatarClick}
+              >
                 {avatarUrl ? <img src={avatarUrl} alt={displayName} onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : initial}
-              </div>
+              </button>
               <div className="account-title">
                 <h2>{displayName || 'User'}</h2>
                 <p>{email}</p>
@@ -171,12 +184,6 @@ export default function AccountPage() {
                   <label htmlFor="email">{t.email}</label>
                   <input id="email" className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required />
                   <div className="help-text">{t.emailHint}</div>
-                </div>
-
-                <div className="settings-field">
-                  <label htmlFor="avatarUrl">{t.avatar}</label>
-                  <input id="avatarUrl" className="input" type="url" value={avatarUrl} onChange={(e) => setAvatarUrl(e.target.value)} placeholder="https://example.com/avatar.jpg" />
-                  <div className="help-text">{t.avatarHint}</div>
                 </div>
               </section>
 
