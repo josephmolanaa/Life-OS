@@ -35,18 +35,46 @@ export default function AccountPage() {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    // Limit file size to 500KB
+    if (file.size > 512 * 1024) {
+      setError('Image too large. Maximum 500KB. / Gambar terlalu besar. Maksimal 500KB.');
+      return;
+    }
+
     try {
       const reader = new FileReader();
       reader.onload = () => {
         const base64 = reader.result as string;
-        setAvatarPreview(base64);
+        // Compress via canvas
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          // Scale down if larger than 300x300
+          if (width > 300 || height > 300) {
+            const scale = Math.min(300 / width, 300 / height);
+            width = Math.round(width * scale);
+            height = Math.round(height * scale);
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) ctx.drawImage(img, 0, 0, width, height);
+          setAvatarPreview(canvas.toDataURL('image/jpeg', 0.75));
+          setError('');
+        };
+        img.onerror = () => {
+          setError('Failed to process image. / Gagal memproses gambar.');
+        };
+        img.src = base64;
       };
       reader.onerror = () => {
-        setError('Failed to read file');
+        setError('Failed to read file. / Gagal membaca file.');
       };
       reader.readAsDataURL(file);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to process image');
+      setError(err instanceof Error ? err.message : 'Failed to process image. / Gagal memproses gambar.');
     }
   }
 
@@ -69,7 +97,7 @@ export default function AccountPage() {
     } else {
       setPassword('');
       setAvatarUrl(avatarPreview);
-      setMessage(updates.email ? 'Profile saved. Check email to confirm email change.' : 'Profile saved.');
+      setMessage(updates.email ? 'Profile saved. Check email to confirm email change. / Profil tersimpan. Cek email untuk konfirmasi perubahan email.' : 'Profile saved. / Profil tersimpan.');
     }
   }
 
@@ -114,7 +142,7 @@ export default function AccountPage() {
 
       <div className="account-container">
         {loading ? (
-          <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text2)' }}>Loading profile...</div>
+          <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text2)' }}>Loading profile... / Memuat profil...</div>
         ) : (
           <form onSubmit={saveAccount}>
             {error && <div className="alert-box alert-error">
@@ -131,7 +159,7 @@ export default function AccountPage() {
                 <div className="account-avatar">
                   {avatarPreview ? <img src={avatarPreview} alt={displayName} /> : initial}
                 </div>
-                <label className="avatar-upload-btn" title="Change profile picture">
+                <label className="avatar-upload-btn" title="Change profile picture / Ubah foto profil">
                   <input type="file" accept="image/*" onChange={handleAvatarSelect} />
                   ✏️
                 </label>
@@ -144,25 +172,25 @@ export default function AccountPage() {
 
             <div style={{ display: 'grid', gap: '24px', marginTop: '24px' }}>
               <section className="account-section">
-                <h3 className="account-section-title">Basic Information</h3>
+                <h3 className="account-section-title">Basic Information / Informasi Dasar</h3>
                 
                 <div className="settings-field">
-                  <label htmlFor="displayName">Display Name</label>
+                  <label htmlFor="displayName">Display Name / Nama Tampilan</label>
                   <input id="displayName" className="input" value={displayName} onChange={(e) => setDisplayName(e.target.value)} autoComplete="name" />
                 </div>
 
                 <div className="settings-field">
-                  <label htmlFor="email">Email Address</label>
+                  <label htmlFor="email">Email Address / Alamat Email</label>
                   <input id="email" className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required />
                   <div className="help-text">This email is used for login and receiving important notifications. / Email ini digunakan untuk login dan menerima notifikasi penting.</div>
                 </div>
               </section>
 
               <section className="account-section">
-                <h3 className="account-section-title">Security</h3>
+                <h3 className="account-section-title">Security / Keamanan</h3>
                 
                 <div className="settings-field">
-                  <label htmlFor="password">Change Password</label>
+                  <label htmlFor="password">Change Password / Ubah Password</label>
                   <input id="password" className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} autoComplete="new-password" placeholder="••••••••" />
                   <div className="help-text">Leave empty if you don't want to change password now. Minimum 6 characters. / Biarkan kosong jika Anda tidak ingin mengubah password saat ini. Minimal 6 karakter.</div>
                 </div>
@@ -174,6 +202,7 @@ export default function AccountPage() {
                   setDisplayName(displayName);
                   setEmail(email);
                   setPassword('');
+                  setError('');
                 }}>
                   Cancel / Batal
                 </button>
