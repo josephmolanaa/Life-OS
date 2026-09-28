@@ -91,6 +91,7 @@ export function Topbar({ title }: { title: string }) {
         <summary aria-label="Account">{name[0]?.toUpperCase()}</summary>
         <div className="accountDropdown">
           <div><b>{name}</b><small>{email || 'Life OS account'}</small></div>
+          <Link href="/account" className="accountLogout" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Edit account</Link>
           <form action={signOut}><button className="accountLogout">Logout</button></form>
         </div>
       </details>
@@ -284,6 +285,7 @@ function QuickFabSlot() {
 export function SummaryCard({ label, value, tone, helper }: { label: string; value: string; tone?: 'positive' | 'negative'; helper?: string }) {
   return <div className="card summary"><div className="muted">{label}</div><div className={`big ${tone ?? ''}`}>{value}</div>{helper && <small className="muted">{helper}</small>}</div>;
 }
+
 
 
 
