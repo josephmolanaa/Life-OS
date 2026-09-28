@@ -9,8 +9,10 @@ export default function AccountPage() {
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
@@ -22,9 +24,49 @@ export default function AccountPage() {
       }
       setEmail(data.user.email ?? '');
       setDisplayName(String(data.user.user_metadata?.display_name ?? data.user.email?.split('@')[0] ?? ''));
+      setAvatarUrl(data.user.user_metadata?.avatar_url ?? '');
       setLoading(false);
     });
   }, [supabase]);
+
+  async function uploadAvatar(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    setError('');
+    setMessage('');
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}/avatar.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage.from('avatars').getPublicUrl(fileName);
+      const publicUrl = data.publicUrl;
+
+      const { error: updateError } = await supabase.auth.updateUser({
+        data: { avatar_url: publicUrl }
+      });
+
+      if (updateError) throw updateError;
+
+      setAvatarUrl(publicUrl);
+      setMessage('Foto profil berhasil diperbarui.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Gagal upload foto');
+    } finally {
+      setUploading(false);
+    }
+  }
 
   async function saveAccount(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -32,8 +74,8 @@ export default function AccountPage() {
     setMessage('');
     setError('');
 
-    const updates: { email?: string; password?: string; data: { display_name: string } } = {
-      data: { display_name: displayName.trim() },
+    const updates: { email?: string; password?: string; data: { display_name: string; avatar_url?: string } } = {
+      data: { display_name: displayName.trim(), avatar_url: avatarUrl },
     };
     if (email.trim()) updates.email = email.trim();
     if (password) updates.password = password;
@@ -53,8 +95,13 @@ export default function AccountPage() {
     <Shell title="Account Settings" quickFab={false}>
       <style dangerouslySetInnerHTML={{ __html: `
         .account-container { max-width: 680px; margin: 0 auto; display: grid; gap: 24px; }
-        .account-header { display: flex; align-items: center; gap: 24px; padding: 24px; background: var(--card-bg, var(--surface)); border: 1px solid var(--border); border-radius: 16px; }
-        .account-avatar { width: 88px; height: 88px; border-radius: 50%; background: var(--surface2); border: 2px solid var(--border2); display: grid; place-items: center; font-size: 36px; font-weight: 700; color: var(--text); flex-shrink: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .account-header { display: flex; align-items: center; gap: 24px; padding: 24px; background: var(--card-bg, var(--surface)); border: 1px solid var(--border); border-radius: 16px; position: relative; }
+        .account-avatar-wrapper { position: relative; flex-shrink: 0; }
+        .account-avatar { width: 88px; height: 88px; border-radius: 50%; background: var(--surface2); border: 2px solid var(--border2); display: grid; place-items: center; font-size: 36px; font-weight: 700; color: var(--text); box-shadow: 0 4px 12px rgba(0,0,0,0.05); overflow: hidden; }
+        .account-avatar img { width: 100%; height: 100%; object-fit: cover; }
+        .avatar-upload-btn { position: absolute; bottom: 0; right: 0; width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: var(--accentText); border: 2px solid var(--surface); display: grid; place-items: center; cursor: pointer; font-size: 16px; transition: transform 0.2s; }
+        .avatar-upload-btn:hover { transform: scale(1.1); }
+        .avatar-upload-btn input { display: none; }
         .account-title h2 { margin: 0 0 6px 0; font-size: 24px; letter-spacing: -0.02em; }
         .account-title p { margin: 0; color: var(--text2); font-size: 15px; }
         
@@ -94,7 +141,15 @@ export default function AccountPage() {
             </div>}
 
             <header className="account-header">
-              <div className="account-avatar">{initial}</div>
+              <div className="account-avatar-wrapper">
+                <div className="account-avatar">
+                  {avatarUrl ? <img src={avatarUrl} alt={displayName} /> : initial}
+                </div>
+                <label className="avatar-upload-btn" title="Ubah foto profil">
+                  <input type="file" accept="image/*" onChange={uploadAvatar} disabled={uploading} />
+                  📷
+                </label>
+              </div>
               <div className="account-title">
                 <h2>{displayName || 'User'}</h2>
                 <p>{email}</p>
