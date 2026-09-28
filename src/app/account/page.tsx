@@ -38,32 +38,27 @@ export default function AccountPage() {
     setMessage('');
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64 = reader.result as string;
+        
+        const { error: updateError } = await supabase.auth.updateUser({
+          data: { avatar_url: base64 }
+        });
 
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}/avatar.${fileExt}`;
+        if (updateError) throw updateError;
 
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(fileName, file, { upsert: true });
-
-      if (uploadError) throw uploadError;
-
-      const { data } = supabase.storage.from('avatars').getPublicUrl(fileName);
-      const publicUrl = data.publicUrl;
-
-      const { error: updateError } = await supabase.auth.updateUser({
-        data: { avatar_url: publicUrl }
-      });
-
-      if (updateError) throw updateError;
-
-      setAvatarUrl(publicUrl);
-      setMessage('Foto profil berhasil diperbarui.');
+        setAvatarUrl(base64);
+        setMessage('Foto profil berhasil diperbarui.');
+        setUploading(false);
+      };
+      reader.onerror = () => {
+        setError('Gagal membaca file');
+        setUploading(false);
+      };
+      reader.readAsDataURL(file);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Gagal upload foto');
-    } finally {
       setUploading(false);
     }
   }
@@ -99,7 +94,7 @@ export default function AccountPage() {
         .account-avatar-wrapper { position: relative; flex-shrink: 0; }
         .account-avatar { width: 88px; height: 88px; border-radius: 50%; background: var(--surface2); border: 2px solid var(--border2); display: grid; place-items: center; font-size: 36px; font-weight: 700; color: var(--text); box-shadow: 0 4px 12px rgba(0,0,0,0.05); overflow: hidden; }
         .account-avatar img { width: 100%; height: 100%; object-fit: cover; }
-        .avatar-upload-btn { position: absolute; bottom: 0; right: 0; width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: var(--accentText); border: 2px solid var(--surface); display: grid; place-items: center; cursor: pointer; font-size: 16px; transition: transform 0.2s; }
+        .avatar-upload-btn { position: absolute; bottom: 0; right: 0; width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: var(--accentText); border: 2px solid var(--surface); display: grid; place-items: center; cursor: pointer; font-size: 16px; transition: transform 0.2s; font-weight: bold; }
         .avatar-upload-btn:hover { transform: scale(1.1); }
         .avatar-upload-btn input { display: none; }
         .account-title h2 { margin: 0 0 6px 0; font-size: 24px; letter-spacing: -0.02em; }
@@ -147,7 +142,7 @@ export default function AccountPage() {
                 </div>
                 <label className="avatar-upload-btn" title="Ubah foto profil">
                   <input type="file" accept="image/*" onChange={uploadAvatar} disabled={uploading} />
-                  📷
+                  ✎
                 </label>
               </div>
               <div className="account-title">
