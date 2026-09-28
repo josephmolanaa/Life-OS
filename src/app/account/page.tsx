@@ -9,8 +9,6 @@ export default function AccountPage() {
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
-  const [avatarUrl, setAvatarUrl] = useState('');
-  const [avatarPreview, setAvatarPreview] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -24,59 +22,9 @@ export default function AccountPage() {
       }
       setEmail(data.user.email ?? '');
       setDisplayName(String(data.user.user_metadata?.display_name ?? data.user.email?.split('@')[0] ?? ''));
-      const avatar = data.user.user_metadata?.avatar_url ?? '';
-      setAvatarUrl(avatar);
-      setAvatarPreview(avatar);
       setLoading(false);
     });
   }, [supabase]);
-
-  async function handleAvatarSelect(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    // Limit file size to 500KB
-    if (file.size > 512 * 1024) {
-      setError('Image too large. Maximum 500KB. / Gambar terlalu besar. Maksimal 500KB.');
-      return;
-    }
-
-    try {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const base64 = reader.result as string;
-        // Compress via canvas
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          let width = img.width;
-          let height = img.height;
-          // Scale down if larger than 300x300
-          if (width > 300 || height > 300) {
-            const scale = Math.min(300 / width, 300 / height);
-            width = Math.round(width * scale);
-            height = Math.round(height * scale);
-          }
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          if (ctx) ctx.drawImage(img, 0, 0, width, height);
-          setAvatarPreview(canvas.toDataURL('image/jpeg', 0.75));
-          setError('');
-        };
-        img.onerror = () => {
-          setError('Failed to process image. / Gagal memproses gambar.');
-        };
-        img.src = base64;
-      };
-      reader.onerror = () => {
-        setError('Failed to read file. / Gagal membaca file.');
-      };
-      reader.readAsDataURL(file);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to process image. / Gagal memproses gambar.');
-    }
-  }
 
   async function saveAccount(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -84,8 +32,8 @@ export default function AccountPage() {
     setMessage('');
     setError('');
 
-    const updates: { email?: string; password?: string; data: { display_name: string; avatar_url?: string } } = {
-      data: { display_name: displayName.trim(), avatar_url: avatarPreview },
+    const updates: { email?: string; password?: string; data: { display_name: string } } = {
+      data: { display_name: displayName.trim() },
     };
     if (email.trim()) updates.email = email.trim();
     if (password) updates.password = password;
@@ -96,7 +44,6 @@ export default function AccountPage() {
       setError(error.message);
     } else {
       setPassword('');
-      setAvatarUrl(avatarPreview);
       setMessage(updates.email ? 'Profile saved. Check email to confirm email change. / Profil tersimpan. Cek email untuk konfirmasi perubahan email.' : 'Profile saved. / Profil tersimpan.');
     }
   }
@@ -107,13 +54,8 @@ export default function AccountPage() {
     <Shell title="Account Settings" quickFab={false}>
       <style dangerouslySetInnerHTML={{ __html: `
         .account-container { max-width: 680px; margin: 0 auto; display: grid; gap: 24px; }
-        .account-header { display: flex; align-items: center; gap: 24px; padding: 24px; background: var(--card-bg, var(--surface)); border: 1px solid var(--border); border-radius: 16px; position: relative; }
-        .account-avatar-wrapper { position: relative; flex-shrink: 0; }
-        .account-avatar { width: 88px; height: 88px; border-radius: 50%; background: var(--surface2); border: 2px solid var(--border2); display: grid; place-items: center; font-size: 36px; font-weight: 700; color: var(--text); box-shadow: 0 4px 12px rgba(0,0,0,0.05); overflow: hidden; }
-        .account-avatar img { width: 100%; height: 100%; object-fit: cover; }
-        .avatar-upload-btn { position: absolute; bottom: 0; right: 0; width: 36px; height: 36px; border-radius: 50%; background: var(--accent); color: var(--accentText); border: 2px solid var(--surface); display: grid; place-items: center; cursor: pointer; font-size: 18px; transition: transform 0.2s; font-weight: bold; }
-        .avatar-upload-btn:hover { transform: scale(1.1); }
-        .avatar-upload-btn input { display: none; }
+        .account-header { display: flex; align-items: center; gap: 24px; padding: 24px; background: var(--card-bg, var(--surface)); border: 1px solid var(--border); border-radius: 16px; }
+        .account-avatar { width: 88px; height: 88px; border-radius: 50%; background: var(--surface2); border: 2px solid var(--border2); display: grid; place-items: center; font-size: 36px; font-weight: 700; color: var(--text); box-shadow: 0 4px 12px rgba(0,0,0,0.05); flex-shrink: 0; }
         .account-title h2 { margin: 0 0 6px 0; font-size: 24px; letter-spacing: -0.02em; }
         .account-title p { margin: 0; color: var(--text2); font-size: 15px; }
         
@@ -123,7 +65,7 @@ export default function AccountPage() {
         .settings-field { display: grid; gap: 8px; margin-bottom: 20px; }
         .settings-field:last-child { margin-bottom: 0; }
         .settings-field label { font-size: 14px; font-weight: 600; color: var(--text); }
-        .settings-field .input { background: var(--bg); border: 1px solid var(--border2); transition: all 0.2s ease; padding: 12px 14px; font-size: 15px; border-radius: 8px; }
+        .settings-field .input { background: var(--bg); border: 1px solid var(--border2); transition: all 0.2s ease; padding: 12px 14px; font-size: 15px; border-radius: 8px; width: 100%; box-sizing: border-box; }
         .settings-field .input:focus { background: var(--surface); border-color: var(--text); outline: none; box-shadow: 0 0 0 3px rgba(26,25,23,0.05); }
         .settings-field .help-text { font-size: 13px; color: var(--text2); margin-top: 4px; }
         
@@ -155,15 +97,7 @@ export default function AccountPage() {
             </div>}
 
             <header className="account-header">
-              <div className="account-avatar-wrapper">
-                <div className="account-avatar">
-                  {avatarPreview ? <img src={avatarPreview} alt={displayName} /> : initial}
-                </div>
-                <label className="avatar-upload-btn" title="Change profile picture / Ubah foto profil">
-                  <input type="file" accept="image/*" onChange={handleAvatarSelect} />
-                  ✏️
-                </label>
-              </div>
+              <div className="account-avatar">{initial}</div>
               <div className="account-title">
                 <h2>{displayName || 'User'}</h2>
                 <p>{email}</p>
@@ -198,7 +132,6 @@ export default function AccountPage() {
 
               <div className="account-actions">
                 <button className="btn-secondary" type="reset" onClick={() => {
-                  setAvatarPreview(avatarUrl);
                   setDisplayName(displayName);
                   setEmail(email);
                   setPassword('');
