@@ -23,6 +23,15 @@ export default function AccountPage() {
       setEmail(data.user.email ?? '');
       setDisplayName(String(data.user.user_metadata?.display_name ?? data.user.email?.split('@')[0] ?? ''));
       setLoading(false);
+
+      // Clear base64 avatar_url if exists (one-time cleanup)
+      if (data.user.user_metadata?.avatar_url?.startsWith('data:')) {
+        fetch('/api/admin/clear-avatar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: data.user.id })
+        }).catch(() => {});
+      }
     });
   }, [supabase]);
 
