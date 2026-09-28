@@ -4,17 +4,67 @@ import { FormEvent, useEffect, useState } from 'react';
 import { Shell } from '@/components/finance/layout';
 import { createClient } from '@/lib/supabase/client';
 
+const translations = {
+  en: {
+    title: 'Account Settings',
+    loading: 'Loading profile...',
+    basic: 'Basic Information',
+    security: 'Security',
+    displayName: 'Display Name',
+    email: 'Email Address',
+    emailHint: 'This email is used for login and receiving important notifications.',
+    avatar: 'Avatar URL',
+    avatarHint: 'Paste an external image URL (e.g., from Imgur, Gravatar)',
+    password: 'Change Password',
+    passwordHint: 'Leave empty if you do not want to change password now. Minimum 6 characters.',
+    cancel: 'Cancel',
+    save: 'Save Changes',
+    saving: 'Saving...',
+    saved: 'Profile saved.',
+    savedEmail: 'Profile saved. Check email to confirm email change.',
+  },
+  id: {
+    title: 'Pengaturan Akun',
+    loading: 'Memuat profil...',
+    basic: 'Informasi Dasar',
+    security: 'Keamanan',
+    displayName: 'Nama Tampilan',
+    email: 'Alamat Email',
+    emailHint: 'Email ini digunakan untuk login dan menerima notifikasi penting.',
+    avatar: 'URL Avatar',
+    avatarHint: 'Tempel URL gambar eksternal (misalnya dari Imgur, Gravatar)',
+    password: 'Ubah Password',
+    passwordHint: 'Biarkan kosong jika Anda tidak ingin mengubah password saat ini. Minimal 6 karakter.',
+    cancel: 'Batal',
+    save: 'Simpan Perubahan',
+    saving: 'Menyimpan...',
+    saved: 'Profil tersimpan.',
+    savedEmail: 'Profil tersimpan. Cek email untuk konfirmasi perubahan email.',
+  }
+};
+
+function getLang(): 'en' | 'id' {
+  if (typeof document === 'undefined') return 'en';
+  const cookie = document.cookie.split('; ').find(row => row.startsWith('finance-lang='))?.split('=')[1];
+  return cookie === 'id' ? 'id' : 'en';
+}
+
 export default function AccountPage() {
   const supabase = createClient();
+  const [lang, setLang] = useState<'en' | 'id'>('en');
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
+  const t = translations[lang];
+
   useEffect(() => {
+    setLang(getLang());
     supabase.auth.getUser().then(({ data, error }) => {
       if (error || !data.user) {
         window.location.replace('/login');
@@ -22,16 +72,8 @@ export default function AccountPage() {
       }
       setEmail(data.user.email ?? '');
       setDisplayName(String(data.user.user_metadata?.display_name ?? data.user.email?.split('@')[0] ?? ''));
+      setAvatarUrl(data.user.user_metadata?.avatar_url ?? '');
       setLoading(false);
-
-      // Clear base64 avatar_url if exists (one-time cleanup)
-      if (data.user.user_metadata?.avatar_url?.startsWith('data:')) {
-        fetch('/api/admin/clear-avatar', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: data.user.id })
-        }).catch(() => {});
-      }
     });
   }, [supabase]);
 
@@ -41,8 +83,8 @@ export default function AccountPage() {
     setMessage('');
     setError('');
 
-    const updates: { email?: string; password?: string; data: { display_name: string } } = {
-      data: { display_name: displayName.trim() },
+    const updates: { email?: string; password?: string; data: { display_name: string; avatar_url?: string } } = {
+      data: { display_name: displayName.trim(), avatar_url: avatarUrl.trim() || undefined },
     };
     if (email.trim()) updates.email = email.trim();
     if (password) updates.password = password;
@@ -53,18 +95,19 @@ export default function AccountPage() {
       setError(error.message);
     } else {
       setPassword('');
-      setMessage(updates.email ? 'Profile saved. Check email to confirm email change. / Profil tersimpan. Cek email untuk konfirmasi perubahan email.' : 'Profile saved. / Profil tersimpan.');
+      setMessage(updates.email ? t.savedEmail : t.saved);
     }
   }
 
   const initial = displayName ? displayName[0].toUpperCase() : email ? email[0].toUpperCase() : '?';
 
   return (
-    <Shell title="Account Settings" quickFab={false}>
+    <Shell title={t.title} quickFab={false}>
       <style dangerouslySetInnerHTML={{ __html: `
         .account-container { max-width: 680px; margin: 0 auto; display: grid; gap: 24px; }
         .account-header { display: flex; align-items: center; gap: 24px; padding: 24px; background: var(--card-bg, var(--surface)); border: 1px solid var(--border); border-radius: 16px; }
-        .account-avatar { width: 88px; height: 88px; border-radius: 50%; background: var(--surface2); border: 2px solid var(--border2); display: grid; place-items: center; font-size: 36px; font-weight: 700; color: var(--text); box-shadow: 0 4px 12px rgba(0,0,0,0.05); flex-shrink: 0; }
+        .account-avatar { width: 88px; height: 88px; border-radius: 50%; background: var(--surface2); border: 2px solid var(--border2); display: grid; place-items: center; font-size: 36px; font-weight: 700; color: var(--text); box-shadow: 0 4px 12px rgba(0,0,0,0.05); flex-shrink: 0; overflow: hidden; }
+        .account-avatar img { width: 100%; height: 100%; object-fit: cover; }
         .account-title h2 { margin: 0 0 6px 0; font-size: 24px; letter-spacing: -0.02em; }
         .account-title p { margin: 0; color: var(--text2); font-size: 15px; }
         
@@ -93,7 +136,7 @@ export default function AccountPage() {
 
       <div className="account-container">
         {loading ? (
-          <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text2)' }}>Loading profile... / Memuat profil...</div>
+          <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text2)' }}>{t.loading}</div>
         ) : (
           <form onSubmit={saveAccount}>
             {error && <div className="alert-box alert-error">
@@ -106,7 +149,9 @@ export default function AccountPage() {
             </div>}
 
             <header className="account-header">
-              <div className="account-avatar">{initial}</div>
+              <div className="account-avatar">
+                {avatarUrl ? <img src={avatarUrl} alt={displayName} onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : initial}
+              </div>
               <div className="account-title">
                 <h2>{displayName || 'User'}</h2>
                 <p>{email}</p>
@@ -115,27 +160,33 @@ export default function AccountPage() {
 
             <div style={{ display: 'grid', gap: '24px', marginTop: '24px' }}>
               <section className="account-section">
-                <h3 className="account-section-title">Basic Information / Informasi Dasar</h3>
+                <h3 className="account-section-title">{t.basic}</h3>
                 
                 <div className="settings-field">
-                  <label htmlFor="displayName">Display Name / Nama Tampilan</label>
+                  <label htmlFor="displayName">{t.displayName}</label>
                   <input id="displayName" className="input" value={displayName} onChange={(e) => setDisplayName(e.target.value)} autoComplete="name" />
                 </div>
 
                 <div className="settings-field">
-                  <label htmlFor="email">Email Address / Alamat Email</label>
+                  <label htmlFor="email">{t.email}</label>
                   <input id="email" className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required />
-                  <div className="help-text">This email is used for login and receiving important notifications. / Email ini digunakan untuk login dan menerima notifikasi penting.</div>
+                  <div className="help-text">{t.emailHint}</div>
+                </div>
+
+                <div className="settings-field">
+                  <label htmlFor="avatarUrl">{t.avatar}</label>
+                  <input id="avatarUrl" className="input" type="url" value={avatarUrl} onChange={(e) => setAvatarUrl(e.target.value)} placeholder="https://example.com/avatar.jpg" />
+                  <div className="help-text">{t.avatarHint}</div>
                 </div>
               </section>
 
               <section className="account-section">
-                <h3 className="account-section-title">Security / Keamanan</h3>
+                <h3 className="account-section-title">{t.security}</h3>
                 
                 <div className="settings-field">
-                  <label htmlFor="password">Change Password / Ubah Password</label>
+                  <label htmlFor="password">{t.password}</label>
                   <input id="password" className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} autoComplete="new-password" placeholder="••••••••" />
-                  <div className="help-text">Leave empty if you don't want to change password now. Minimum 6 characters. / Biarkan kosong jika Anda tidak ingin mengubah password saat ini. Minimal 6 karakter.</div>
+                  <div className="help-text">{t.passwordHint}</div>
                 </div>
               </section>
 
@@ -143,13 +194,14 @@ export default function AccountPage() {
                 <button className="btn-secondary" type="reset" onClick={() => {
                   setDisplayName(displayName);
                   setEmail(email);
+                  setAvatarUrl(avatarUrl);
                   setPassword('');
                   setError('');
                 }}>
-                  Cancel / Batal
+                  {t.cancel}
                 </button>
                 <button className="btn-primary" type="submit" disabled={saving}>
-                  {saving ? 'Saving... / Menyimpan...' : 'Save Changes / Simpan Perubahan'}
+                  {saving ? t.saving : t.save}
                 </button>
               </div>
             </div>
