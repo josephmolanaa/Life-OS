@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { QuickFab } from './quick-fab';
 import { useEffect, useState } from 'react';
+import { createClient } from '@/lib/supabase/client';
 
 const navGroups = [
   {
@@ -74,14 +75,22 @@ const navGroups = [
 ];
 
 export function Topbar({ title }: { title: string }) {
+  const [email, setEmail] = useState('');
+
+  useEffect(() => {
+    createClient().auth.getUser().then(({ data }) => setEmail(data.user?.email ?? ''));
+  }, []);
+
+  const name = email.split('@')[0] || 'User';
+
   return <header className="topbar">
     <div className="topbarLeft"><h1>{title}</h1></div>
     <div className="topbarRight">
       <ChromeControls />
       <details className="accountMenu">
-        <summary aria-label="Account">J</summary>
+        <summary aria-label="Account">{name[0]?.toUpperCase()}</summary>
         <div className="accountDropdown">
-          <div><b>Joseph</b><small>Life OS account</small></div>
+          <div><b>{name}</b><small>{email || 'Life OS account'}</small></div>
           <form action={signOut}><button className="accountLogout">Logout</button></form>
         </div>
       </details>
@@ -275,6 +284,7 @@ function QuickFabSlot() {
 export function SummaryCard({ label, value, tone, helper }: { label: string; value: string; tone?: 'positive' | 'negative'; helper?: string }) {
   return <div className="card summary"><div className="muted">{label}</div><div className={`big ${tone ?? ''}`}>{value}</div>{helper && <small className="muted">{helper}</small>}</div>;
 }
+
 
 
 
