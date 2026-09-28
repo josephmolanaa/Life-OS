@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
@@ -28,13 +28,15 @@ export default function LoginPage() {
       if (error) setError(error.message);
       else setMessage('Registration successful! Please check your email.');
     } else {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const result = await response.json().catch(() => ({}));
       setLoading(false);
-      if (error) setError(error.message);
-      else {
-        await supabase.auth.getSession();
-        window.location.replace('/finance');
-      }
+      if (!response.ok) setError(result.error ?? 'Login gagal.');
+      else window.location.replace('/finance');
     }
   };
 
