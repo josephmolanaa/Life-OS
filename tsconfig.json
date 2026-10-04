@@ -22,11 +22,9 @@
         "name": "next"
       }
     ],
-    "baseUrl": "./src", // â† ubah di sini
+    "baseUrl": "./src",
     "paths": {
-      "@/*": [
-        "*"
-      ] // relatif ke src
+      "@/*": ["*"]
     }
   },
   "include": [

@@ -1,23 +1,80 @@
 {
   "name": "life-os",
+  "version": "1.0.2",
   "private": true,
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
-    "start": "next start"
+    "build": "node scripts/build.cjs",
+    "start": "next start",
+    "desktop:dev": "electron .",
+    "desktop:prepare": "node scripts/prepare-desktop.cjs",
+    "desktop:check": "node scripts/check-desktop.cjs",
+    "desktop:build": "npm run build && npm run desktop:prepare && electron-builder --win nsis --publish never && npm run desktop:check",
+    "desktop:publish": "npm run build && npm run desktop:prepare && electron-builder --win nsis --publish always"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.48.1",
+    "@tailwindcss/postcss": "^4.3.3",
+    "electron-updater": "^6.8.9",
+    "fs-extra": "^11.3.0",
     "lucide-react": "^0.475.0",
-    "next": "13.5.11",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
+    "next": "15.0.3",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
     "recharts": "^2.15.1"
   },
   "devDependencies": {
-    "@types/node": "^20.5.6",
-    "@types/react": "^18.2.28",
-    "typescript": "^5.3.3"
+    "@types/node": "^20.17.6",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.2.11",
+    "electron": "^37.9.0",
+    "electron-builder": "^26.0.12",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^15.5.27",
+    "typescript": "^5.8.2"
+  },
+  "build": {
+    "appId": "com.lifeos.app",
+    "productName": "Life OS",
+    "asar": true,
+    "files": [
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": ".next/standalone",
+        "to": "app-server",
+        "filter": [
+          "**/*",
+          "!**/.env*"
+        ]
+      },
+      {
+        "from": ".next/standalone/node_modules",
+        "to": "app-server/node_modules"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "josephmolanaa",
+      "repo": "Life-OS",
+      "releaseType": "release"
+    },
+    "icon": "build/icon.ico"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/josephmolanaa/Life-OS.git"
   }
 }

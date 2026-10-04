@@ -18,7 +18,10 @@
 /out/
 
 # production
-/build
+/build/*
+/dist
+/hidden_node_modules
+!/build/icon.ico
 
 # misc
 .DS_Store
