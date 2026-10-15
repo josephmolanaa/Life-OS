@@ -8,7 +8,7 @@ export default function StudyPage() {
   return (
     <Shell title="Study Hub" quickFab={false}>
       <div style={{ display: 'grid', gap: '20px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: '16px' }}>
           <Link href="/study/jadwal" className="card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '12px', textDecoration: 'none' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <Calendar size={22} className="card-icon" />

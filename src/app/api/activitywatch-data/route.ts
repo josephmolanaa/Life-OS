@@ -111,8 +111,9 @@ export async function GET(request: Request) {
     const { data: { user: currentUser } } = await supabase.auth.getUser();
     user = currentUser;
   } catch {
-    // Auth optional
+    return NextResponse.json({ error: 'Authentication unavailable' }, { status: 503 });
   }
+  if (!user || !supabase) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   let rules: ActivityRule[] = [];
   if (user && supabase) {
@@ -127,6 +128,8 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const dateParam = url.searchParams.get('date');
   const rangeParam = url.searchParams.get('range') || '1m';
+  if (!['4h', '1d', '1w', '1m'].includes(rangeParam)) return NextResponse.json({ error: 'Invalid range' }, { status: 400 });
+  if (dateParam && !/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) return NextResponse.json({ error: 'Invalid date' }, { status: 400 });
 
   let start: Date;
   let end: Date;
@@ -135,6 +138,7 @@ export async function GET(request: Request) {
   if (dateParam) {
     const [year, month, day] = dateParam.split('-').map(Number);
     anchor = new Date(year, month - 1, day, 23, 59, 59, 999);
+    if (Number.isNaN(anchor.getTime()) || anchor.getFullYear() !== year || anchor.getMonth() !== month - 1 || anchor.getDate() !== day) return NextResponse.json({ error: 'Invalid date' }, { status: 400 });
   } else {
     anchor = new Date();
   }
@@ -156,8 +160,18 @@ export async function GET(request: Request) {
     start = new Date(anchor.getTime() - 30 * 24 * 60 * 60 * 1000);
   }
 
+  // Local ActivityWatch belongs to one machine owner. Allow either the stable
+  // Supabase ID or email so setup does not require looking up a UUID.
+  const configuredOwnerId = process.env.ACTIVITYWATCH_OWNER_ID?.trim();
+  const configuredOwnerEmail = process.env.ACTIVITYWATCH_OWNER_EMAIL?.trim().toLowerCase();
+  const canReadLiveDevice = Boolean(
+    (configuredOwnerId && configuredOwnerId === user.id) ||
+    (configuredOwnerEmail && user.email?.toLowerCase() === configuredOwnerEmail),
+  );
   // 1. Coba fetch dari ActivityWatch live
   try {
+    // The watcher belongs to the server's owner, not every signed-in account.
+    if (!canReadLiveDevice) throw new Error('Live device access disabled');
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3000);
     const bucketsResponse = await fetch('http://127.0.0.1:5600/api/0/buckets', { cache: 'no-store', signal: controller.signal }).finally(() => clearTimeout(timeoutId));
@@ -172,7 +186,7 @@ export async function GET(request: Request) {
     const eventsResponse = await fetch(
       `http://127.0.0.1:5600/api/0/buckets/${windowBucketKey}/events?start=${start.toISOString()}&end=${end.toISOString()}`,
       { cache: 'no-store', signal: eventsCtrl.signal }
-    );
+    ).finally(() => clearTimeout(evTimeoutId));
     if (!eventsResponse.ok) throw new Error('Event fetch failed');
     const rawEvents = await eventsResponse.json();
 
@@ -204,7 +218,7 @@ export async function GET(request: Request) {
             timestamp: c.event_timestamp,
             duration: c.duration_seconds,
           }));
-          const payload = processEventsToPayload(cachedEvents, rules, 'Cached Device', start, rangeParam, 'Cached data (AW Offline)');
+          const payload = processEventsToPayload(cachedEvents, rules, 'Cached Device', start, rangeParam, 'Cached activity data');
           return NextResponse.json(payload);
         }
       } catch {
@@ -215,7 +229,7 @@ export async function GET(request: Request) {
     // 3. Fallback total kalau gak ada data sama sekali
     return NextResponse.json({
       items: [],
-      status: 'Offline (No cached data)',
+      status: canReadLiveDevice ? 'Offline (No cached data)' : 'Live device access unavailable (No cached data)',
       hostname: 'Unknown',
       timelineData: [],
     }, { status: 200 });

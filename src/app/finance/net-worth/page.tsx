@@ -2,6 +2,7 @@ import { AmountInput } from '@/components/finance/amount-input';
 import { TrendLine } from '@/components/finance/charts';
 import { ConfirmSubmit } from '@/components/finance/confirm-submit';
 import { Shell } from '@/components/finance/layout';
+import { LocalDateInput } from '@/components/finance/local-date-input';
 import { createNetWorth, deleteNetWorth, updateNetWorth } from '@/lib/actions';
 import { requireFinance } from '@/lib/data';
 import { money } from '@/lib/finance';
@@ -11,12 +12,11 @@ export default async function NetWorth({ searchParams }: { searchParams: Promise
   const params = await searchParams;
   const data = await requireFinance();
   const id = await getLang() === 'id';
-  const today = new Date().toISOString().slice(0, 10);
   const latest = data.netWorth.at(-1);
 
   return <Shell title="Net Worth">
     {params.error && <div className="notice error">{params.error}</div>}
-    <div className="grid grid2"><div className="card"><div className="muted">{id ? 'Net worth terakhir' : 'Latest net worth'}</div><div className="big">{money.format(Number(latest?.net_worth_amount ?? 0))}</div></div><form className="card form" action={createNetWorth}><b>{id ? 'Snapshot manual' : 'Manual snapshot'}</b><input className="input" name="date" type="date" defaultValue={today}/><AmountInput name="assets_amount" placeholder={id ? 'Aset, contoh 50.000.000' : 'Assets, e.g. 50,000,000'}/><AmountInput name="liabilities_amount" placeholder={id ? 'Liabilitas, contoh 5.000.000' : 'Liabilities, e.g. 5,000,000'}/><input className="input" name="note" placeholder={id ? 'Catatan' : 'Note'}/><button className="btn">{id ? 'Simpan snapshot' : 'Save snapshot'}</button></form></div>
+    <div className="grid grid2"><div className="card"><div className="muted">{id ? 'Net worth terakhir' : 'Latest net worth'}</div><div className="big">{money.format(Number(latest?.net_worth_amount ?? 0))}</div></div><form className="card form" action={createNetWorth}><b>{id ? 'Snapshot manual' : 'Manual snapshot'}</b><LocalDateInput className="input" name="date"/><AmountInput name="assets_amount" placeholder={id ? 'Aset, contoh 50.000.000' : 'Assets, e.g. 50,000,000'}/><AmountInput name="liabilities_amount" placeholder={id ? 'Liabilitas, contoh 5.000.000' : 'Liabilities, e.g. 5,000,000'}/><input className="input" name="note" placeholder={id ? 'Catatan' : 'Note'}/><button className="btn">{id ? 'Simpan snapshot' : 'Save snapshot'}</button></form></div>
     <div className="card sectionGap"><b>Trend</b><TrendLine data={data.netWorth.map(n => ({name:n.snapshot_date,value:Number(n.net_worth_amount)}))}/></div>
     <div className="list sectionGap">{data.netWorth.map(n => <details className="card loanDetails" key={n.id}>
       <summary className="loanSummary"><span>{n.snapshot_date}<br/><small className="muted">{n.note}</small></span><b>{money.format(Number(n.net_worth_amount))}</b></summary>

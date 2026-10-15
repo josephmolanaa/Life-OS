@@ -12,21 +12,21 @@ export default function RpsPage() {
 
   return (
     <Shell title="RPS (Rencana Pembelajaran Semester)" quickFab={false}>
-      <div style={{ display: 'grid', gap: '20px' }}>
+      <div style={{ display: 'grid', gap: '20px', minWidth: 0 }}>
         {rpsList.map((item, idx) => (
-          <div key={idx} className="card" style={{ padding: '24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <div>
+          <div key={idx} className="card" style={{ padding: 'clamp(16px, 4vw, 24px)', minWidth: 0 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px', gap: '12px', flexWrap: 'wrap' }}>
+              <div style={{ minWidth: 0, flex: '1 1 220px' }}>
                 <span className="pill" style={{ marginBottom: '6px', display: 'inline-block' }}>{item.code}</span>
-                <h2 style={{ margin: '4px 0 0', fontSize: '18px', fontWeight: 600 }}>{item.course}</h2>
+                <h2 style={{ margin: '4px 0 0', fontSize: '18px', fontWeight: 600, overflowWrap: 'anywhere' }}>{item.course}</h2>
               </div>
               <span className="big" style={{ fontSize: '20px' }}>{item.progress}</span>
             </div>
             <div className="list">
               {item.topics.map((topic, tIdx) => (
                 <div key={tIdx} className="item" style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', padding: '10px 0' }}>
-                  <CheckCircle2 size={16} style={{ color: 'var(--green)' }} />
-                  <span>{topic}</span>
+                  <CheckCircle2 size={16} style={{ color: 'var(--green)', flexShrink: 0 }} />
+                  <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{topic}</span>
                 </div>
               ))}
             </div>

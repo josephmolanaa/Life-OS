@@ -1,5 +1,6 @@
 "use client";
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { signOut } from '@/lib/actions';
@@ -7,7 +8,6 @@ import { ChromeControls, SidebarToggleButton } from './chrome-controls';
 import {
   ArrowLeftRight,
   BarChart3,
-  CreditCard,
   Settings,
   Activity,
   LayoutGrid,
@@ -21,11 +21,13 @@ import {
   ChevronRight,
   BookOpen,
   FileText,
-  Calendar
+  Calendar,
+  LogOut
 } from 'lucide-react';
 import { QuickFab } from './quick-fab';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { getLang, type Lang } from '@/lib/i18n';
 
 const navGroups = [
   {
@@ -62,23 +64,35 @@ const navGroups = [
   {
     title: 'Study',
     items: [
-      { href: '/study/jadwal', label: 'Jadwal', Icon: Calendar },
+      { href: '/study/jadwal', label: 'Schedule', Icon: Calendar },
       { href: '/study/rps', label: 'RPS', Icon: FileText },
     ],
   },
   {
     title: 'System',
     items: [
-      { href: '/finance/settings', label: 'Settings', Icon: Settings },
+      { href: '/settings', label: 'Settings', Icon: Settings },
     ],
   },
 ];
+const groupLabels: Record<Lang, Record<string, string>> = {
+  en: { Main: 'Main', Finance: 'Finance', Tools: 'Tools', Pillars: 'Pillars', Study: 'Study', System: 'System' },
+  id: { Main: 'Utama', Finance: 'Keuangan', Tools: 'Alat', Pillars: 'Pilar', Study: 'Studi', System: 'Sistem' },
+};
 
+const navLabels: Record<Lang, Record<string, string>> = {
+  en: { '/': 'Dashboard', '/finance': 'Overview', '/finance/reports': 'Reports', '/finance/loans': 'Loans', '/activitywatch': 'Activity', '/habits': 'Habits', '/diary': 'Diary', '/career': 'Career', '/physique': 'Physique', '/social': 'Social', '/discipline': 'Discipline', '/study/jadwal': 'Schedule', '/study/rps': 'RPS', '/settings': 'Settings' },
+  id: { '/': 'Dasbor', '/finance': 'Ringkasan', '/finance/reports': 'Laporan', '/finance/loans': 'Utang', '/activitywatch': 'Aktivitas', '/habits': 'Kebiasaan', '/diary': 'Catatan', '/career': 'Karier', '/physique': 'Fisik', '/social': 'Sosial', '/discipline': 'Disiplin', '/study/jadwal': 'Jadwal', '/study/rps': 'RPS', '/settings': 'Pengaturan' },
+};
 export function Topbar({ title }: { title: string }) {
   const [email, setEmail] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState('');
 
   useEffect(() => {
-    createClient().auth.getUser().then(({ data }) => setEmail(data.user?.email ?? ''));
+    createClient().auth.getUser().then(({ data }) => {
+      setEmail(data.user?.email ?? '');
+      setAvatarUrl(String(data.user?.user_metadata?.avatar_url ?? ''));
+    });
   }, []);
 
   const name = email.split('@')[0] || 'User';
@@ -88,7 +102,7 @@ export function Topbar({ title }: { title: string }) {
     <div className="topbarRight">
       <ChromeControls />
       <details className="accountMenu">
-        <summary aria-label="Account">{name[0]?.toUpperCase()}</summary>
+        <summary aria-label="Account menu"><span className="accountAvatar">{avatarUrl ? <Image unoptimized width={80} height={80} src={avatarUrl} alt="" /> : name[0]?.toUpperCase()}</span><ChevronDown size={12} aria-hidden="true" /></summary>
         <div className="accountDropdown">
           <div><b>{name}</b><small>{email || 'Life OS account'}</small></div>
           <Link href="/account" className="accountLogout" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Edit account</Link>
@@ -99,47 +113,83 @@ export function Topbar({ title }: { title: string }) {
   </header>;
 }
 
+function subscribeSidebar(onChange: () => void) {
+  window.addEventListener('storage', onChange);
+  window.addEventListener('lifeos-sidebar', onChange);
+  return () => { window.removeEventListener('storage', onChange); window.removeEventListener('lifeos-sidebar', onChange); };
+}
+
+function sidebarSnapshot() {
+  try { return localStorage.getItem('sidebar_collapsed_groups') || '{}'; } catch { return '{}'; }
+}
+
+function subscribeCompact(onChange: () => void) {
+  const query = window.matchMedia('(max-width: 1100px)');
+  query.addEventListener('change', onChange);
+  return () => query.removeEventListener('change', onChange);
+}
+
 export function BottomNav() {
   const pathname = usePathname();
-  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const savedGroups = useSyncExternalStore(subscribeSidebar, sidebarSnapshot, () => '{}');
+  let collapsedGroups: Record<string, boolean> = {};
+  try {
+    const parsed = JSON.parse(savedGroups);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) collapsedGroups = parsed;
+  } catch { /* Ignore malformed browser preferences. */ }
+  const [lang, setLang] = useState<Lang>('en');
+  const isCompact = useSyncExternalStore(subscribeCompact, () => window.matchMedia('(max-width: 1100px)').matches, () => false);
+
+  useEffect(() => { getLang().then(setLang); }, []);
 
   useEffect(() => {
-    const saved = localStorage.getItem('sidebar_collapsed_groups');
-    if (saved) setCollapsedGroups(JSON.parse(saved));
-  }, []);
+    if (window.matchMedia('(max-width: 760px)').matches) {
+      document.querySelector('.bottom [aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'center' });
+    }
+  }, [pathname, isCompact]);
+
+  const primaryNavGroups = navGroups.filter(group => group.title !== 'System');
+  const systemItems = navGroups.find(group => group.title === 'System')?.items ?? [];
 
   const toggleGroup = (title: string) => {
     const next = { ...collapsedGroups, [title]: !collapsedGroups[title] };
-    setCollapsedGroups(next);
     localStorage.setItem('sidebar_collapsed_groups', JSON.stringify(next));
+    window.dispatchEvent(new Event('lifeos-sidebar'));
   };
 
-  return <nav className="bottom">
-    <div className="navHead"><div className="navBrand"><span>Life OS</span></div><SidebarToggleButton /></div>
-    {navGroups.map(group => {
-      const isCollapsed = !!collapsedGroups[group.title];
-      return (
-        <div key={group.title} className="nav-group">
-          <h2 
-            className="nav-group-title" 
-            onClick={() => toggleGroup(group.title)}
-          >
-            <span>{group.title}</span>
+  return <nav className="bottom" aria-label="Primary navigation">
+    <div className="navHead"><Image unoptimized width={32} height={32} className="navLogo" src="/icon2.ico" alt="" /><div className="navBrand"><span>Sch</span></div><SidebarToggleButton /></div>
+    <div className="navScroll">
+      {primaryNavGroups.map(group => {
+        const isCollapsed = !!collapsedGroups[group.title];
+        return <div key={group.title} className="nav-group">
+          <button type="button" aria-expanded={!isCollapsed} className="nav-group-title" onClick={() => toggleGroup(group.title)}>
+            <span>{groupLabels[lang][group.title]}</span>
             {isCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
-          </h2>
-          {!isCollapsed && group.items.map(({ href, label, Icon }) => {
-            const isActive = href === '/' ? pathname === '/' : pathname.startsWith(href);
-            return <Link key={href} href={href} className={`nav-item ${isActive ? 'active' : ''}`}>
-              <span className="nav-icon"><Icon size={18} strokeWidth={2.2} aria-hidden="true" /></span>
-              <span className="nav-label">{label}</span>
+          </button>
+          {(!isCollapsed || isCompact) && group.items.map(({ href, label, Icon }) => {
+            const isActive = pathname === href || (href !== '/' && href !== '/finance' && pathname.startsWith(`${href}/`));
+            const localizedLabel = navLabels[lang][href] ?? label;
+            return <Link key={href} href={href} aria-label={localizedLabel} title={localizedLabel} aria-current={isActive ? 'page' : undefined} className={`nav-item ${isActive ? 'active' : ''}`}>
+              <span className="nav-icon"><Icon size={18} strokeWidth={2.1} aria-hidden="true" /></span>
+              <span className="nav-label">{localizedLabel}</span>
             </Link>;
           })}
-        </div>
-      );
-    })}
+        </div>;
+      })}
+    </div>
+    <div className="navFooter">
+      {systemItems.map(({ href, label, Icon }) => {
+        const isActive = pathname === href || (href === '/settings' && pathname.startsWith('/finance/settings'));
+        return <Link key={href} href={href} aria-label={navLabels[lang][href] ?? label} title={navLabels[lang][href] ?? label} aria-current={isActive ? 'page' : undefined} className={`nav-item nav-footer-item ${isActive ? 'active' : ''}`}>
+          <span className="nav-icon"><Icon size={18} strokeWidth={2.1} aria-hidden="true" /></span>
+          <span className="nav-label">{navLabels[lang][href] ?? label}</span>
+        </Link>;
+      })}
+      <form action={signOut}><button className="nav-item nav-footer-item nav-logout" type="submit" aria-label={lang === 'id' ? 'Keluar' : 'Sign Out'} title={lang === 'id' ? 'Keluar' : 'Sign Out'}><span className="nav-icon"><LogOut size={18} strokeWidth={2.1} aria-hidden="true" /></span><span className="nav-label">{lang === 'id' ? 'Keluar' : 'Sign Out'}</span></button></form>
+    </div>
   </nav>;
 }
-
 export function Shell({ title, children, quickFab = true }: { title: string; children: React.ReactNode; quickFab?: boolean }) {
   
   useEffect(() => {
@@ -155,7 +205,9 @@ export function Shell({ title, children, quickFab = true }: { title: string; chi
   }, []);
 
   return (
-    <main className="shell">
+    <>
+      <a className="skipLink" href="#main-content">Skip to content</a>
+      <main className="shell" id="main-content" tabIndex={-1}>
       <style dangerouslySetInnerHTML={{ __html: `
         .nav-group { margin-bottom: 1rem; }
         .nav-group-title, .nav-label, .navBrand span { transition: all 0.2s ease; }
@@ -174,6 +226,11 @@ export function Shell({ title, children, quickFab = true }: { title: string; chi
         .nav-label { font-size: 0.875rem; font-weight: 500; }
         
         .nav-group-title {
+            width: 100%;
+            border: 0;
+            background: transparent;
+            font-family: inherit;
+            text-align: left;
             font-size: 0.7rem;
             font-weight: 600;
             color: var(--text2);
@@ -274,7 +331,8 @@ export function Shell({ title, children, quickFab = true }: { title: string; chi
       {children}
       <BottomNav />
       {quickFab && <QuickFabSlot />}
-    </main>
+      </main>
+    </>
   );
 }
 

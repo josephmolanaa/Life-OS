@@ -1,5 +1,6 @@
 import { AmountInput } from '@/components/finance/amount-input';
 import { ConfirmSubmit } from '@/components/finance/confirm-submit';
+import { LocalDateInput } from '@/components/finance/local-date-input';
 import { Shell } from '@/components/finance/layout';
 import { createLoan, deleteLoan, settleLoan, updateLoan } from '@/lib/actions';
 import { requireFinance } from '@/lib/data';
@@ -10,7 +11,6 @@ export default async function Loans({ searchParams }: { searchParams: Promise<{ 
   const params = await searchParams;
   const data = await requireFinance();
   const id = await getLang() === 'id';
-  const today = new Date().toISOString().slice(0, 10);
   const receivable = data.loans.filter(l => l.direction === 'give' && l.status === 'open').reduce((sum, loan) => sum + Number(loan.amount), 0);
   const payable = data.loans.filter(l => l.direction === 'get' && l.status === 'open').reduce((sum, loan) => sum + Number(loan.amount), 0);
 
@@ -24,7 +24,7 @@ export default async function Loans({ searchParams }: { searchParams: Promise<{ 
         <select className="input" name="direction"><option value="give">{id ? 'Give - piutang' : 'Give - receivable'}</option><option value="get">{id ? 'Get - utang' : 'Get - payable'}</option></select>
         <input className="input" name="person_name" placeholder={id ? 'Nama orang' : 'Person name'} required/>
         <AmountInput name="amount" placeholder={id ? 'Jumlah, contoh 100.000' : 'Amount, e.g. 100,000'} required/>
-        <input className="input" name="date" type="date" defaultValue={today}/>
+        <LocalDateInput className="input" name="date"/>
         <input className="input" name="due_date" type="date"/>
         <select className="input" name="wallet_id" required>{data.wallets.filter(w => !w.is_archived).map(w => <option key={w.id} value={w.id}>{w.name}</option>)}</select>
         <input className="input" name="note" placeholder={id ? 'Catatan' : 'Note'}/>

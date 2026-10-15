@@ -13,26 +13,37 @@ export default function ActivityRulesPage() {
   const [rules, setRules] = useState<ActivityRule[]>([]);
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    fetch('/api/activity-rules').then((response) => response.json()).then(setRules).catch(() => setRules([]));
+    fetch('/api/activity-rules').then(async (response) => {
+      const data = await response.json();
+      if (!response.ok || !Array.isArray(data)) throw new Error('Unable to load activity rules. Please refresh to retry.');
+      setRules(data);
+    }).catch(() => setError('Unable to load activity rules. Please refresh to retry.'));
   }, []);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    const method = editingId ? 'PUT' : 'POST';
-    const body = editingId ? { id: editingId, ...form } : form;
-    const response = await fetch('/api/activity-rules', {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const rule = await response.json();
-    if (rule?.id) {
-      setRules((current) => editingId ? current.map((item) => item.id === rule.id ? rule : item) : [rule, ...current]);
+    setBusy(true);
+    setError('');
+    try {
+      const method = editingId ? 'PUT' : 'POST';
+      const body = editingId ? { id: editingId, ...form } : form;
+      const response = await fetch('/api/activity-rules', {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const rule = await response.json();
+      if (!response.ok || !rule?.id) throw new Error('Unable to save activity rule');
+      setRules((current) => current.some((item) => item.id === rule.id) ? current.map((item) => item.id === rule.id ? rule : item) : [rule, ...current]);
       setForm(emptyForm);
       setEditingId(null);
-    }
+    } catch {
+      setError('Unable to save activity rule. Your changes are still in the form.');
+    } finally { setBusy(false); }
   };
 
   const startEdit = (rule: ActivityRule) => {
@@ -41,21 +52,28 @@ export default function ActivityRulesPage() {
   };
 
   const remove = async (id: string) => {
-    await fetch('/api/activity-rules', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id }),
-    });
-    setRules((current) => current.filter((rule) => rule.id !== id));
-    if (editingId === id) {
-      setEditingId(null);
-      setForm(emptyForm);
-    }
+    setBusy(true);
+    setError('');
+    try {
+      const response = await fetch('/api/activity-rules', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      if (!response.ok) throw new Error('Unable to delete activity rule');
+      setRules((current) => current.filter((rule) => rule.id !== id));
+      if (editingId === id) {
+        setEditingId(null);
+        setForm(emptyForm);
+      }
+    } catch { setError('Unable to delete activity rule. Please try again.'); }
+    finally { setBusy(false); }
   };
 
   return (
     <Shell title="Activity Rules" quickFab={false}>
       <div style={{ display: 'grid', gap: '20px' }}>
+        {error && <p role="alert">{error}</p>}
         <header className="card" style={{ padding: '20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
@@ -79,8 +97,8 @@ export default function ActivityRulesPage() {
             {categoryOptions.map((category) => <option key={category} value={category} />)}
           </datalist>
           <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
-            <button className="btn" type="submit">{editingId ? 'Update rule' : 'Add rule'}</button>
-            {editingId && <button className="btn ghost" type="button" onClick={() => { setEditingId(null); setForm(emptyForm); }}>Cancel edit</button>}
+            <button className="btn" type="submit" disabled={busy}>{editingId ? 'Update rule' : 'Add rule'}</button>
+            {editingId && <button className="btn ghost" type="button" disabled={busy} onClick={() => { setEditingId(null); setForm(emptyForm); }}>Cancel edit</button>}
           </div>
         </form>
 
@@ -93,8 +111,8 @@ export default function ActivityRulesPage() {
                   <p className="muted" style={{ fontSize: '12px', margin: '4px 0 0' }}>{rule.match_type}: {rule.match_value} ? {rule.category}</p>
                 </div>
                 <div className="row">
-                  <button className="btn ghost" type="button" onClick={() => startEdit(rule)}>Edit</button>
-                  <button className="btn ghost" type="button" onClick={() => remove(rule.id)}>Delete</button>
+                  <button className="btn ghost" type="button" disabled={busy} onClick={() => startEdit(rule)}>Edit</button>
+                  <button className="btn ghost" type="button" disabled={busy} onClick={() => remove(rule.id)}>Delete</button>
                 </div>
               </div>
             </article>

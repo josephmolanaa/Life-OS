@@ -1,0 +1,10 @@
+begin;
+alter table todos add column if not exists priority text not null default 'MEDIUM';
+alter table todos drop constraint if exists todos_priority_check;
+alter table todos add constraint todos_priority_check check (priority in ('LOW','MEDIUM','HIGH'));
+alter table todos add column if not exists list_kind text not null default 'daily';
+alter table todos drop constraint if exists todos_list_kind_check;
+alter table todos add constraint todos_list_kind_check check (list_kind in ('daily', 'task'));
+alter table todos drop constraint if exists todos_user_id_label_key;
+create unique index if not exists todos_user_list_label_key on todos(user_id, list_kind, label);
+commit;

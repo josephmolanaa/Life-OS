@@ -1,18 +1,24 @@
-﻿import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 
 export const dynamic = 'force-dynamic';
 import './globals.css';
 import { PrivacyProvider } from '@/components/finance/privacy-context';
 import { PwaRegister } from '@/components/pwa-register';
+import { AiSettingsProvider } from '@/components/ai-settings';
+import { FloatingAiChat } from '@/components/floating-ai-chat';
+import { getLang } from '@/lib/i18n';
 
 export const metadata: Metadata = {
-  title: 'Life OS',
+  title: 'Scaramouche',
   description: 'Personal command center for finance, activity, habits, and progress.',
   manifest: '/manifest.webmanifest',
   icons: {
-    icon: '/icon.svg',
-    apple: '/icon.svg',
+    icon: '/icon2.ico',
+    apple: '/icon2.ico',
   },
+};
+
+export const viewport: Viewport = {
   themeColor: '#121212',
 };
 
@@ -34,16 +40,17 @@ const themeScript = `
 })();
 `;
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const lang = await getLang();
   return (
-    <html lang="id" suppressHydrationWarning className="dark-mode">
+    <html lang={lang} suppressHydrationWarning className="dark-mode">
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body>
         <PwaRegister />
         <PrivacyProvider>
-          {children}
+          <AiSettingsProvider>{children}<FloatingAiChat /></AiSettingsProvider>
         </PrivacyProvider>
       </body>
     </html>

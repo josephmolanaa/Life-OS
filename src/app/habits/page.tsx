@@ -3,43 +3,31 @@
 import { useEffect, useState } from 'react';
 import { Shell } from '@/components/finance/layout';
 import { DailyQuestCard } from '@/components/life-os-daily-quest';
+import { ContentSkeleton } from '@/components/app-loading';
 
 type TodoRow = { id: string; label: string; done: boolean };
 type TodoItem = { id: string; label: string; done: boolean; streak: number };
-
-const defaultTodos = [
-  'Workout pagi (Physic)',
-  'Baca buku 20 mnt (Social/Career)',
-  'Journal / reflection (Discipline)',
-  'Belajar AI 1 jam (Career)',
-  'Push GitHub Streak (Career)',
-];
 
 function mapTodoRows(rows: TodoRow[]): TodoItem[] {
   return rows.map((row) => ({ ...row, streak: row.done ? 1 : 0 }));
 }
 
-async function ensureTodos(): Promise<TodoItem[]> {
+async function loadTodos(): Promise<TodoItem[]> {
   const response = await fetch('/api/todos', { cache: 'no-store' });
   if (!response.ok) throw new Error('Failed to load todos');
-  const rows = (await response.json()) as TodoRow[];
-  if (rows.length) return mapTodoRows(rows);
-
-  await Promise.all(defaultTodos.map((label) => fetch('/api/todos', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ label }),
-  })));
-
-  const seeded = await fetch('/api/todos', { cache: 'no-store' });
-  return mapTodoRows(await seeded.json());
+  return mapTodoRows(await response.json() as TodoRow[]);
 }
 
 export default function HabitsPage() {
   const [todos, setTodos] = useState<TodoItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    ensureTodos().then(setTodos).catch(() => setTodos(defaultTodos.map((label, index) => ({ id: `fallback-${index}`, label, done: false, streak: 0 }))));
+    loadTodos()
+      .then(setTodos)
+      .catch(() => setError('Daily quests could not be loaded. Please refresh and try again.'))
+      .finally(() => setLoading(false));
   }, []);
 
   const handleToggle = async (id: string, checked: boolean) => {
@@ -56,6 +44,34 @@ export default function HabitsPage() {
       body: JSON.stringify({ label }),
     });
   };
+  const handleAdd = async (label: string) => {
+    setError('');
+    try {
+      const response = await fetch('/api/todos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label }),
+      });
+      if (!response.ok) throw new Error('Failed to add daily quest');
+      const [quest] = mapTodoRows([await response.json() as TodoRow]);
+      setTodos((current) => [quest, ...current]);
+      return true;
+    } catch {
+      setError('Daily quest could not be added. Please try again.');
+      return false;
+    }
+  };
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('Delete this daily quest?')) return;
+    setError('');
+    try {
+      const response = await fetch(`/api/todos/${id}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error('Failed to delete daily quest');
+      setTodos((current) => current.filter((todo) => todo.id !== id));
+    } catch {
+      setError('Daily quest could not be deleted. Please try again.');
+    }
+  };
 
   return (
     <Shell title="Habits" quickFab={false}>
@@ -65,7 +81,9 @@ export default function HabitsPage() {
           <h1 className="big" style={{ margin: '8px 0 6px', fontSize: '28px' }}>Daily Todo List</h1>
           <p className="muted" style={{ margin: 0 }}>Checklist harian terpisah dari dashboard utama.</p>
         </header>
-        <DailyQuestCard todos={todos} onToggle={handleToggle} onUpdate={handleUpdate} />
+        {loading
+          ? <ContentSkeleton variant="habits" />
+          : <DailyQuestCard todos={todos} onToggle={handleToggle} onAdd={handleAdd} onUpdate={handleUpdate} onDelete={handleDelete} error={error} />}
       </div>
     </Shell>
   );

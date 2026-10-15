@@ -6,7 +6,7 @@ import { Shell } from '@/components/finance/layout';
 import { applyActivityRules } from '@/lib/activitywatch-rules';
 import type { ActivityRule, ActivityWatchItem } from '@/lib/activitywatch-types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { getLang, copy, type Lang, type Translation } from '@/lib/i18n';
+import { copy } from '@/lib/i18n';
 
 const categoryOptions = ['work', 'play', 'learn', 'admin', 'social', 'health', 'uncategorized'] as const;
 const rangeOptions = [
@@ -42,7 +42,7 @@ const fallbackItems: ActivityWatchItem[] = [
   { app: 'WhatsApp', window: 'Chat with team', minutes: 12, started: '11:40' },
 ];
 
-function formatMinutes(minutes: number, _range?: string) {
+function formatMinutes(minutes: number) {
   if (minutes >= 24 * 60) {
     const d = Math.floor(minutes / (24 * 60));
     const h = Math.floor((minutes % (24 * 60)) / 60);
@@ -62,13 +62,14 @@ function formatMinutes(minutes: number, _range?: string) {
 
 async function loadRules(): Promise<ActivityRule[]> {
   const response = await fetch('/api/activity-rules', { cache: 'no-store' });
-  if (!response.ok) return [];
-  return response.json();
+  if (!response.ok) throw new Error('Unable to load activity rules');
+  const data = await response.json();
+  if (!Array.isArray(data)) throw new Error('Invalid activity rules response');
+  return data;
 }
 
 export default function ActivityPage() {
-  const [lang, setLang] = useState<Lang>('en');
-  const [t, setT] = useState<Translation>(copy.en);
+  const t = copy.en;
   const [items, setItems] = useState<ActivityWatchItem[]>(fallbackItems);
   const [status, setStatus] = useState('Fallback data loaded');
   const [rules, setRules] = useState<ActivityRule[]>([]);
@@ -80,10 +81,6 @@ export default function ActivityPage() {
   const [hostname, setHostname] = useState('Unknown');
   const [hourlyActivity, setHourlyActivity] = useState([]);
   const [range, setRange] = useState('1d');
-  const [appTimeframe, setAppTimeframe] = useState('1d');
-  const [windowTimeframe, setWindowTimeframe] = useState('1d');
-  const [appData, setAppData] = useState([]);
-  const [windowData, setWindowData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState<string>('all');
@@ -103,8 +100,8 @@ export default function ActivityPage() {
 
   useEffect(() => {
     const run = async () => {
-      const nextRules = await loadRules().catch(() => []);
-      setRules(nextRules);
+      try { setRules(await loadRules()); }
+      catch { setNotice('Activity rules could not be loaded. Refresh to retry.'); }
     };
     void run();
   }, []);
@@ -138,40 +135,6 @@ export default function ActivityPage() {
     };
     void load();
   }, [selectedDate, range]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    const fetchAppData = async () => {
-      try {
-        const response = await fetch(`/api/activitywatch-data?date=${selectedDate}&range=${appTimeframe}`, { signal: controller.signal });
-        if (response.ok) {
-          const data = await response.json();
-          setAppData(data.items || []);
-        }
-      } catch (e: any) {
-        if (e.name !== 'AbortError') setAppData([]);
-      }
-    };
-    void fetchAppData();
-    return () => controller.abort();
-  }, [selectedDate, appTimeframe]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    const fetchWindowData = async () => {
-      try {
-        const response = await fetch(`/api/activitywatch-data?date=${selectedDate}&range=${windowTimeframe}`, { signal: controller.signal });
-        if (response.ok) {
-          const data = await response.json();
-          setWindowData(data.items || []);
-        }
-      } catch (e: any) {
-        if (e.name !== 'AbortError') setWindowData([]);
-      }
-    };
-    void fetchWindowData();
-    return () => controller.abort();
-  }, [selectedDate, windowTimeframe]);
 
   const mappedItems = useMemo(() => applyActivityRules(items, rules), [items, rules]);
   const totalMinutes = useMemo(() => mappedItems.reduce((sum, item) => sum + item.minutes, 0), [mappedItems]);
@@ -267,16 +230,17 @@ export default function ActivityPage() {
     setSaving(true);
     setNotice('');
     const ruleData = { match_type: 'app', match_value: selectedApp, display_name: form.display_name || selectedApp, category: form.category };
+    try {
     const response = await fetch('/api/activity-rules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ruleData) });
     if (response.ok) {
-      const nextRules = await loadRules().catch(() => []);
-      setRules(nextRules);
+      setRules(await loadRules());
       setSelectedApp(null);
       setNotice(`Rule saved for ${selectedApp}`);
     } else {
       setNotice('Rule gagal disimpan');
     }
-    setSaving(false);
+    } catch { setNotice('Rule gagal disimpan atau dimuat. Coba lagi.'); }
+    finally { setSaving(false); }
   };
 
   const cancelQuickRule = () => {
@@ -294,20 +258,24 @@ export default function ActivityPage() {
       display_name,
       category
     };
+    try {
     const response = await fetch('/api/activity-rules', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(ruleData)
     });
     if (response.ok) {
-      const nextRules = await loadRules().catch(() => []);
-      setRules(nextRules);
+      setRules(await loadRules());
+    } else {
+      setNotice('Rule gagal disimpan');
     }
+    } catch { setNotice('Rule gagal disimpan atau dimuat. Coba lagi.'); }
   };
 
   return (
     <Shell title="ActivityWatch Module" quickFab={false}>
       <div style={{ display: 'grid', gap: '24px' }}>
+        {notice && !selectedApp && <p role="alert" className="muted" style={{ margin: 0 }}>{notice}</p>}
         <style dangerouslySetInnerHTML={{ __html: `
           @keyframes shimmer {
             0% { opacity: 0.4; }
@@ -406,7 +374,7 @@ export default function ActivityPage() {
             <div style={{ fontSize: '28px', background: 'rgba(59, 130, 246, 0.1)', padding: '12px', borderRadius: '12px' }}>&#x23F1;&#xFE0F;</div>
             <div>
               <p className="muted" style={{ margin: 0, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Time Active</p>
-              <h3 style={{ margin: '4px 0 0', fontSize: '20px', fontWeight: 700 }}>{formatMinutes(totalMinutes, range)}</h3>
+              <h3 style={{ margin: '4px 0 0', fontSize: '20px', fontWeight: 700 }}>{formatMinutes(totalMinutes)}</h3>
             </div>
           </div>
           <div className="card" style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -428,7 +396,7 @@ export default function ActivityPage() {
             <div>
               <p className="muted" style={{ margin: 0, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Uncategorized</p>
               <h3 style={{ margin: '4px 0 0', fontSize: '20px', fontWeight: 700, color: uncategorizedPercentage > 30 ? '#ef4444' : 'inherit' }}>
-                {formatMinutes(uncategorizedMinutes, range)}
+                {formatMinutes(uncategorizedMinutes)}
               </h3>
             </div>
           </div>
@@ -535,7 +503,7 @@ export default function ActivityPage() {
                     <div key={app.name} style={{ display: 'grid', gap: '6px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', alignItems: 'center' }}>
                         <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '75%' }}>{app.name}</span>
-                        <span className="muted" style={{ fontSize: '12px' }}>{formatMinutes(app.minutes, appTimeframe)} ({app.totalPct}%)</span>
+                        <span className="muted" style={{ fontSize: '12px' }}>{formatMinutes(app.minutes)} ({app.totalPct}%)</span>
                       </div>
                       <div className="progress-track">
                         <div className="progress-bar" style={{ width: `${app.percentage}%`, background: categoryColors[app.category] || 'var(--accent, #3b82f6)' }} />
@@ -561,7 +529,7 @@ export default function ActivityPage() {
                     <div key={win.name} style={{ display: 'grid', gap: '6px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', alignItems: 'center' }}>
                         <span style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '75%', fontSize: '12px' }} className="muted">{win.name}</span>
-                        <span className="muted" style={{ fontSize: '11px' }}>{formatMinutes(win.minutes, windowTimeframe)} ({win.totalPct}%)</span>
+                        <span className="muted" style={{ fontSize: '11px' }}>{formatMinutes(win.minutes)} ({win.totalPct}%)</span>
                       </div>
                       <div className="progress-track">
                         <div className="progress-bar" style={{ width: `${win.percentage}%`, background: '#38bdf8' }} />
@@ -691,7 +659,7 @@ export default function ActivityPage() {
                           {item.started}
                         </td>
                         <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: 'bold', color: 'var(--green)' }}>
-                          {formatMinutes(item.minutes, range)}
+                          {formatMinutes(item.minutes)}
                         </td>
                         <td style={{ padding: '12px 10px', textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
                           <select

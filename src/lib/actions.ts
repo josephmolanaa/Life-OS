@@ -26,14 +26,12 @@ function value(formData: FormData, key: string) { return String(formData.get(key
 function amount(formData: FormData, key: string) {
   const raw = value(formData, key);
   if (!raw) return 0;
-  const cleaned = raw.replace(/[^0-9.,]/g, '');
-  const normalized = cleaned.includes(',')
-    ? cleaned.replace(/\./g, '').replace(',', '.')
-    : /^\d{1,3}(\.\d{3})+$/.test(cleaned) || (cleaned.match(/\./g)?.length ?? 0) > 1
-      ? cleaned.replace(/\./g, '')
-      : cleaned;
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+  // AmountInput and native number inputs submit ungrouped decimal values.
+  const parsed = Number(raw);
+  if (!/^\d+(?:\.\d+)?(?:e[+-]?\d+)?$/i.test(raw) || !Number.isFinite(parsed) || parsed > Number.MAX_SAFE_INTEGER || (parsed === 0 && /[1-9]/.test(raw.split(/[eE]/)[0]))) {
+    throw new Error(`${key} must be a valid non-negative amount`);
+  }
+  return parsed;
 }
 
 function required(formData: FormData, key: string, label: string) {
@@ -51,20 +49,23 @@ function requiredAmount(formData: FormData, key: string, label: string) {
 function enumValue<T extends readonly string[]>(formData: FormData, key: string, allowed: T, fallback?: T[number]) {
   const text = value(formData, key);
   if (allowed.includes(text)) return text as T[number];
-  if (fallback) return fallback;
+  if (!text && fallback) return fallback;
   throw new Error(`${key} is invalid`);
 }
 
 function dateValue(formData: FormData, key: string, fallbackToday = true) {
   const text = value(formData, key);
-  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
-  if (fallbackToday) return new Date().toISOString().slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    const parsed = new Date(`${text}T00:00:00Z`);
+    if (Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === text) return text;
+  }
+  if (!text && fallbackToday) return new Date().toISOString().slice(0, 10);
   throw new Error(`${key} is invalid`);
 }
 
 function monthValue(formData: FormData, key: string) {
   const text = value(formData, key);
-  if (/^\d{4}-\d{2}$/.test(text)) return `${text}-01`;
+  if (/^\d{4}-(0[1-9]|1[0-2])$/.test(text)) return `${text}-01`;
   throw new Error('month is invalid');
 }
 

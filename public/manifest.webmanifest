@@ -1,6 +1,6 @@
-﻿{
-  "name": "Life OS",
-  "short_name": "Life OS",
+{
+  "name": "Scaramouche",
+  "short_name": "Scaramouche",
   "start_url": "/dashboard",
   "scope": "/",
   "display": "standalone",

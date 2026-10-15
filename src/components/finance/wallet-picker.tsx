@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ChevronDown, Pencil } from 'lucide-react';
 import Link from 'next/link';
 
@@ -34,10 +34,10 @@ export function WalletPicker({
   
   const isOpen = controlledOpen !== undefined ? controlledOpen : uncontrolledOpen;
   
-  const handleOpenChange = (newOpen: boolean) => {
+  const handleOpenChange = useCallback((newOpen: boolean) => {
     setUncontrolledOpen(newOpen);
     if (onOpenChange) onOpenChange(newOpen);
-  };
+  }, [onOpenChange]);
 
   const handleSelect = (id: string) => {
     setSelected(id);
@@ -52,7 +52,7 @@ export function WalletPicker({
     const closeOnEscape = (e: KeyboardEvent) => { if (e.key === 'Escape') handleOpenChange(false); };
     document.addEventListener('keydown', closeOnEscape);
     return () => document.removeEventListener('keydown', closeOnEscape);
-  }, [isOpen]);
+  }, [isOpen, handleOpenChange]);
 
   return (
     <>

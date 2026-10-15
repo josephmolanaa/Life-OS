@@ -11,21 +11,27 @@ type TodoItem = {
 type Props = {
   todos: TodoItem[];
   onToggle: (id: string, checked: boolean) => void;
-  onAdd?: (label: string) => void;
+  onAdd?: (label: string) => Promise<boolean>;
   onDelete?: (id: string) => void;
   onUpdate?: (id: string, label: string) => void;
+  error?: string;
 };
 
-export function DailyQuestCard({ todos, onToggle, onAdd, onDelete, onUpdate }: Props) {
+export function DailyQuestCard({ todos, onToggle, onAdd, onDelete, onUpdate, error }: Props) {
   const [newHabit, setNewHabit] = useState('');
+  const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState('');
 
-  const handleAdd = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newHabit.trim() || !onAdd) return;
-    onAdd(newHabit.trim());
-    setNewHabit('');
+  const handleAdd = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!newHabit.trim() || !onAdd || isAdding) return;
+    setIsAdding(true);
+    try {
+      if (await onAdd(newHabit.trim())) setNewHabit('');
+    } finally {
+      setIsAdding(false);
+    }
   };
 
   const startEdit = (todo: TodoItem) => {
@@ -45,7 +51,7 @@ export function DailyQuestCard({ todos, onToggle, onAdd, onDelete, onUpdate }: P
   };
 
   return (
-    <section className="card" style={{ padding: '24px', display: 'flex', flexDirection: 'column' }}>
+    <section className="card dailyQuestCard">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
         <div>
           <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>Daily Quest</h2>
@@ -55,20 +61,23 @@ export function DailyQuestCard({ todos, onToggle, onAdd, onDelete, onUpdate }: P
       </div>
 
       <div className="list" style={{ display: 'grid', gap: '8px', marginBottom: '20px' }}>
+        {error && <p role="alert" aria-live="assertive" style={{ margin: 0, color: 'var(--red)', fontSize: '13px' }}>{error}</p>}
         {todos.map((todo) => {
           const isEditing = editingId === todo.id;
           return (
-            <div key={todo.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', borderRadius: '8px', background: 'var(--surface2)', border: '1px solid var(--border2)' }}>
+            <div key={todo.id} className="dailyQuestItem">
               <input
                 type="checkbox"
+                aria-label={`${todo.done ? 'Mark incomplete' : 'Complete'} ${todo.label}`}
                 checked={todo.done}
                 onChange={(event) => onToggle(todo.id, event.target.checked)}
                 style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: 'var(--green)', flexShrink: 0 }}
               />
               
-              <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+              <div className="dailyQuestContent">
                 {isEditing ? (
                   <input
+                    aria-label={`Edit ${todo.label}`}
                     value={editLabel}
                     onChange={(e) => setEditLabel(e.target.value)}
                     onKeyDown={(e) => {
@@ -94,16 +103,16 @@ export function DailyQuestCard({ todos, onToggle, onAdd, onDelete, onUpdate }: P
               <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
                 {isEditing ? (
                   <>
-                    <button onClick={() => saveEdit(todo.id)} style={{ background: 'none', border: 'none', color: 'var(--green)', cursor: 'pointer', padding: '4px' }}><Check size={15} /></button>
-                    <button onClick={cancelEdit} style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', padding: '4px' }}><X size={15} /></button>
+                    <button aria-label={`Save ${todo.label}`} onClick={() => saveEdit(todo.id)} style={{ background: 'none', border: 'none', color: 'var(--green)', cursor: 'pointer', padding: '4px' }}><Check size={15} /></button>
+                    <button aria-label={`Cancel editing ${todo.label}`} onClick={cancelEdit} style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', padding: '4px' }}><X size={15} /></button>
                   </>
                 ) : (
                   <>
                     {onUpdate && (
-                      <button onClick={() => startEdit(todo)} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', padding: '4px' }} title="Edit habit"><Pencil size={15} /></button>
+                      <button aria-label={`Edit ${todo.label}`} onClick={() => startEdit(todo)} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', padding: '6px' }} title="Edit habit"><Pencil size={15} /></button>
                     )}
                     {onDelete && (
-                      <button onClick={() => onDelete(todo.id)} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', padding: '4px' }} title="Delete habit"><Trash2 size={15} /></button>
+                      <button aria-label={`Delete ${todo.label}`} onClick={() => onDelete(todo.id)} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', padding: '6px' }} title="Delete habit"><Trash2 size={15} /></button>
                     )}
                   </>
                 )}
@@ -117,23 +126,25 @@ export function DailyQuestCard({ todos, onToggle, onAdd, onDelete, onUpdate }: P
       </div>
 
       {onAdd && (
-        <form 
+        <form className="dailyQuestForm"
           onSubmit={handleAdd} 
-          style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px', marginTop: 'auto', flexWrap: 'wrap' }}
         >
           <input
             type="text"
+            aria-label="New daily quest"
+            maxLength={120}
+            disabled={isAdding}
             value={newHabit}
             onChange={(e) => setNewHabit(e.target.value)}
             placeholder="New habit..."
-            style={{ width: '180px', fontSize: '13px', padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)' }}
+            className="input dailyQuestInput"
           />
           <button
             type="submit"
-            disabled={!newHabit.trim()}
-            style={{ padding: '6px 12px', fontSize: '13px', borderRadius: '6px', background: 'var(--green)', color: '#000', border: 'none', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', opacity: newHabit.trim() ? 1 : 0.5 }}
+            className="btn"
+            disabled={!newHabit.trim() || isAdding}
           >
-            <Plus size={14} /> Add
+            <Plus size={14} aria-hidden="true" /> Add
           </button>
         </form>
       )}

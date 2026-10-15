@@ -1,7 +1,7 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -22,20 +22,15 @@ export async function middleware(request: NextRequest) {
   );
 
   const { data } = await supabase.auth.getUser();
-  
-  // Clear large base64 avatar_url from metadata to prevent 494 REQUEST_HEADER_TOO_LARGE
-  if (data.user?.user_metadata?.avatar_url && data.user.user_metadata.avatar_url.startsWith('data:')) {
-    await supabase.auth.updateUser({
-      data: { avatar_url: undefined }
-    }).catch(() => {
-      // Silently ignore if update fails
-    });
+
+  if (data.user?.user_metadata?.avatar_url?.startsWith('data:')) {
+    await supabase.auth.updateUser({ data: { avatar_url: undefined } }).catch(() => {});
   }
-  
+
   response.headers.set('Cache-Control', 'private, no-store');
   return response;
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
 };

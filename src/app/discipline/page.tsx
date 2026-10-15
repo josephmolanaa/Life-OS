@@ -1,8 +1,9 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect } from 'react';
 import { Shell } from '@/components/finance/layout';
-import { getLang, copy, type Lang, type Translation } from '@/lib/i18n';
+import { ContentSkeleton } from '@/components/app-loading';
+import { getLang, copy, type Translation } from '@/lib/i18n';
 import { Target, TrendingUp, HeartPulse, ListChecks, Users, Briefcase, RefreshCw } from 'lucide-react';
 
 const SOCIAL_APPS = ['discord', 'whatsapp', 'telegram', 'twitter', 'instagram', 'facebook'];
@@ -10,14 +11,16 @@ const TARGET_SOCIAL_MINUTES = 60; // Max recommended social screen time per day
 const TARGET_CAREER_HOURS = 2.0;   // Target career study/work hours per day
 
 export default function DisciplinePage() {
-  const [lang, setLang] = useState<Lang>('en');
   const [t, setT] = useState<Translation>(copy.en);
   const [loading, setLoading] = useState(true);
+  const [history, setHistory] = useState<Array<{ date: string; total_score: number }>>([]);
+  const [unavailable, setUnavailable] = useState(false);
+  const [saveError, setSaveError] = useState(false);
 
   const [scores, setScores] = useState({
     physique: 0,
     habits: 0,
-    social: 100,
+    social: 0,
     career: 0,
     total: 0
   });
@@ -27,28 +30,32 @@ export default function DisciplinePage() {
 
     let physiqueScore = 0;
     let habitsScore = 0;
-    let socialScore = 100;
+    let socialScore = 0;
+    let incomplete = false;
     let careerScore = 0;
 
     // 1. Ambil data Physique dari Supabase API
     try {
       const res = await fetch('/api/physique', { cache: 'no-store' });
+      if (!res.ok) throw new Error(`Request failed: ${res.status}`);
       if (res.ok) {
         const data = await res.json();
-        const checklists = data.checklists || [];
-        const meals = checklists.filter((c: any) => c.type === 'meal');
+        const checklists: Array<{ type: string; is_completed: boolean }> = data.checklists || [];
+        const meals = checklists.filter((c) => c.type === 'meal');
         if (meals.length > 0) {
-          const completedMeals = meals.filter((m: any) => m.is_completed).length;
+          const completedMeals = meals.filter((m) => m.is_completed).length;
           physiqueScore = (completedMeals / meals.length) * 100;
         }
       }
     } catch (e) {
+      incomplete = true;
       console.error('Failed to load physique for discipline:', e);
     }
 
     // 2. Ambil data Habits (Daily Tasks) dari Supabase API
     try {
       const res = await fetch('/api/todos', { cache: 'no-store' });
+      if (!res.ok) throw new Error(`Request failed: ${res.status}`);
       if (res.ok) {
         const todos: Array<{ done: boolean }> = await res.json();
         if (todos.length > 0) {
@@ -56,20 +63,25 @@ export default function DisciplinePage() {
         }
       }
     } catch (e) {
+      incomplete = true;
       console.error('Failed to load habits for discipline:', e);
     }
 
     // 3. Ambil data Social dari ActivityWatch API
     try {
-      const date = new Date().toISOString().split('T')[0];
+      const now = new Date();
+      const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       const res = await fetch(`/api/activitywatch-data?date=${date}&range=1d`);
+      if (!res.ok) throw new Error(`Request failed: ${res.status}`);
       if (res.ok) {
         const data = await res.json();
-        const items = data.items || [];
-        const socialItems = items.filter((act: any) => 
+        const items: Array<{ app: string; minutes: number }> = data.items || [];
+        if (!items.length) incomplete = true;
+        else socialScore = 100;
+        const socialItems = items.filter((act) =>
           SOCIAL_APPS.some(app => act.app.toLowerCase().includes(app))
         );
-        const totalSocialMinutes = socialItems.reduce((acc: number, act: any) => acc + (act.minutes || 0), 0);
+        const totalSocialMinutes = socialItems.reduce((acc, act) => acc + (act.minutes || 0), 0);
         
         if (totalSocialMinutes > TARGET_SOCIAL_MINUTES) {
           const excess = totalSocialMinutes - TARGET_SOCIAL_MINUTES;
@@ -77,12 +89,14 @@ export default function DisciplinePage() {
         }
       }
     } catch (e) {
+      incomplete = true;
       console.error('Failed to load social for discipline:', e);
     }
 
     // 4. Ambil data Career dari Supabase API
     try {
       const res = await fetch('/api/career/hours', { cache: 'no-store' });
+      if (!res.ok) throw new Error(`Request failed: ${res.status}`);
       if (res.ok) {
         const data = await res.json();
         const summary: Array<{ todayHours?: number }> = data.summary || [];
@@ -90,53 +104,89 @@ export default function DisciplinePage() {
         careerScore = Math.min(100, (todayHours / TARGET_CAREER_HOURS) * 100);
       }
     } catch (e) {
+      incomplete = true;
       console.error('Failed to load career for discipline:', e);
     }
 
     // Hitung rata-rata total kedisiplinan
     const totalScore = (physiqueScore + habitsScore + socialScore + careerScore) / 4;
-
-    setScores({
+    const roundedScores = {
       physique: Math.round(physiqueScore),
       habits: Math.round(habitsScore),
       social: Math.round(socialScore),
       career: Math.round(careerScore),
       total: Math.round(totalScore)
+    };
+
+    if (!incomplete) {
+      const current = new Date();
+      const localDate = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`;
+      try {
+        const save = await fetch('/api/discipline', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ ...roundedScores, date: localDate }),
+        });
+        if (!save.ok) throw new Error('Discipline save failed');
+        setSaveError(false);
+      } catch {
+        setSaveError(true);
+      }
+    }
+
+    setScores({
+      ...roundedScores
     });
 
+    try {
+      const response = await fetch('/api/discipline', { cache: 'no-store' });
+      if (!response.ok) throw new Error('History unavailable');
+      setHistory(await response.json());
+    } catch {
+      setHistory([]);
+      incomplete = true;
+    }
+    setUnavailable(incomplete);
     setLoading(false);
   };
 
   useEffect(() => {
     getLang().then(l => {
-      setLang(l);
       setT(copy[l]);
     });
-    loadData();
+    void Promise.resolve().then(loadData);
   }, []);
 
   const generateHeatmap = () => {
     return Array.from({ length: 30 }).map((_, i) => {
-      const intensity = i === 29 ? scores.total : Math.floor(Math.random() * 80) + 20;
+      const date = new Date();
+      date.setDate(date.getDate() - (29 - i));
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      const intensity = i === 29 && !unavailable ? scores.total : history.find(day => day.date === key)?.total_score;
+      const label = intensity === undefined ? `${key}: No recorded data` : `${key}: ${intensity}%`;
       let color = 'bg-slate-800';
-      if (intensity >= 80) color = 'bg-green-600';
-      else if (intensity >= 50) color = 'bg-green-700';
-      else if (intensity >= 20) color = 'bg-green-900';
+      if (intensity !== undefined && intensity >= 80) color = 'bg-green-600';
+      else if (intensity !== undefined && intensity >= 50) color = 'bg-green-700';
+      else if (intensity !== undefined && intensity >= 20) color = 'bg-green-900';
       
       return (
         <div 
           key={i} 
           style={{ width: '20px', height: '20px', borderRadius: '4px' }} 
           className={color} 
-          title={`Day ${i + 1}: ${intensity}%`} 
+          title={label}
+          role="img"
+          aria-label={label}
         />
       );
     });
   };
+  if (loading) return <Shell title={t.disciplineTitle} quickFab={false}><ContentSkeleton variant="discipline" /></Shell>;
 
   return (
     <Shell title={t.disciplineTitle} quickFab={false}>
       <div style={{ display: 'grid', gap: '20px' }}>
+        {unavailable && <p role="status">Some data is unavailable. Today&apos;s scores are incomplete.</p>}
+        {saveError && <p role="alert">Today&apos;s score could not be saved.</p>}
         {/* Header Action */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span className="muted">{t.disciplineToday}</span>
@@ -153,7 +203,7 @@ export default function DisciplinePage() {
                 <TrendingUp size={18} className="card-icon" />
                 <span>{t.disciplineToday.toUpperCase()}</span>
               </div>
-              <div className="big positive">{scores.total}%</div>
+              <div className="big positive">{unavailable ? 'Unavailable' : `${scores.total}%`}</div>
             </div>
             <div className="reportBar" style={{ marginTop: '16px' }}>
               <i style={{ width: `${scores.total}%`, background: 'var(--green)' }}></i>
@@ -204,6 +254,7 @@ export default function DisciplinePage() {
         {/* Heatmap Section */}
         <div className="card">
           <h2 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px' }}>{t.contributionHeatmap}</h2>
+          <p className="muted">Unrecorded days remain empty.</p>
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
             {generateHeatmap()}
           </div>

@@ -1,5 +1,5 @@
 ﻿import { createClient } from '@/lib/supabase/client';
-import { SupabaseClient } from '@supabase/supabase-js';
+
 
 export type WeightLog = {
   id: string;
@@ -19,7 +19,7 @@ export type ExerciseLog = {
 };
 
 export async function getWeightLogs(): Promise<WeightLog[]> {
-  const supabase = await createClient() as SupabaseClient<any, "public", any>;
+  const supabase = createClient();
   const { data, error } = await supabase
     .from('physique_weight')
     .select('*')
@@ -29,7 +29,7 @@ export async function getWeightLogs(): Promise<WeightLog[]> {
 }
 
 export async function getExerciseLogs(): Promise<ExerciseLog[]> {
-  const supabase = await createClient() as SupabaseClient<any, "public", any>;
+  const supabase = createClient();
   const { data, error } = await supabase
     .from('physique_exercise')
     .select('*')

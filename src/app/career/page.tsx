@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Shell } from '@/components/finance/layout';
 import type { CareerSkill, SkillHoursSummary, CareerBranch } from '@/lib/career-types';
 import { Briefcase, TrendingUp, Users, Zap, Target, Clock, BookOpen, RefreshCw } from 'lucide-react';
+import { ContentSkeleton } from '@/components/app-loading';
 
 const BRANCH_META: Record<CareerBranch, { label: string; color: string; bg: string; icon: typeof Briefcase }> = {
   ai_engineer: { label: 'AI Engineer', color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.1)', icon: Briefcase },
@@ -22,34 +23,24 @@ export default function CareerPage() {
   const [seeding, setSeeding] = useState(false);
   const [error, setError] = useState('');
 
-  const loadAll = useCallback(async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const skillsRes = await fetch('/api/career/skills', { cache: 'no-store' });
+  const loadAll = useCallback(() => fetch('/api/career/skills', { cache: 'no-store' })
+    .then(async skillsRes => {
+      if (!skillsRes.ok) throw new Error('Could not load career skills');
       const skillsData: CareerSkill[] = await skillsRes.json();
-      setSkills(skillsData);
-
+      if (!Array.isArray(skillsData)) throw new Error('Invalid career response');
+      let hoursSummary: SkillHoursSummary[] = [];
       if (skillsData.length > 0) {
         const hoursRes = await fetch('/api/career/hours', { cache: 'no-store' });
+        if (!hoursRes.ok) throw new Error('Could not load career hours');
         const hoursData: { summary?: SkillHoursSummary[] } = await hoursRes.json();
-        const hoursSummary = hoursData.summary || [];
-        setSummary(hoursSummary);
-
-        const merged = skillsData.map((skill) => {
-          const h = hoursSummary.find((s) => s.skillSlug === skill.slug);
-          return { ...skill, ...h };
-        });
-        setSkills(merged);
-      } else {
-        setSummary([]);
+        hoursSummary = hoursData.summary || [];
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal load career data');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+      setSkills(skillsData.map(skill => ({ ...skill, ...hoursSummary.find(summary => summary.skillSlug === skill.slug) })));
+      setSummary(hoursSummary);
+      setError('');
+    })
+    .catch(err => setError(err instanceof Error ? err.message : 'Gagal load career data'))
+    .finally(() => setLoading(false)), []);
 
   useEffect(() => {
     void loadAll();
@@ -96,7 +87,7 @@ export default function CareerPage() {
                 Track skill growth across AI, Economics, and Soft Skills branches.
              </p>
            </div>
-            <button className="btn ghost" type="button" onClick={loadAll} disabled={loading} style={{ gap: '6px' }}>
+            <button className="btn ghost" type="button" onClick={() => { setLoading(true); void loadAll(); }} disabled={loading} style={{ gap: '6px' }}>
               <RefreshCw size={14} /> Refresh
            </button>
          </div>
@@ -122,7 +113,7 @@ export default function CareerPage() {
 
         {!loading && skills.length > 0 && (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: '16px' }}>
               <div className="card" style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div style={{ fontSize: '24px', background: 'rgba(59, 130, 246, 0.1)', padding: '10px', borderRadius: '10px' }}>
                   <Zap size={20} />
@@ -165,7 +156,7 @@ export default function CareerPage() {
            </div>
 
             {/* Desktop: 3 Columns, Mobile: 1 Column */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px', alignItems: 'start' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: '16px', alignItems: 'start' }}>
               {BRANCHES.map((branch) => {
                 const meta = BRANCH_META[branch];
                 const Icon = meta.icon;
@@ -235,7 +226,7 @@ export default function CareerPage() {
         )}
 
         {loading && (
-          <p className="muted" style={{ textAlign: 'center', padding: '40px 0' }}>Loading career data</p>
+          <ContentSkeleton variant="career" />
         )}
      </div>
    </Shell>

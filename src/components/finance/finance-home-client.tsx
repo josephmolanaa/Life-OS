@@ -7,14 +7,14 @@ import { PrivacyToggleButton } from '@/components/finance/privacy-toggle-button'
 
 type Wallet = { id: string; name: string; type: string; currency: string; balance?: number | null };
 
-type Summary = { label: string; value: string; tone?: 'positive' | 'negative'; helper?: string; mask?: boolean };
+type Summary = { id: string; label: string; value: string; tone?: 'positive' | 'negative'; helper?: string; mask?: boolean };
 
 export function FinanceHomeClient({ summaries, wallets, walletTitle, walletHelp, viewAll, empty }: { summaries: Summary[]; wallets: Wallet[]; walletTitle: string; walletHelp: string; viewAll: string; empty: { title: string; text: string; href: string; label: string } }) {
   const { hidden, maskValue, maskCurrency } = usePrivacy();
 
   return <>
     <section className="grid grid2 metricGrid">
-      {summaries.map((summary, index) => <div className={`card summary ${index === 0 ? 'balanceSummary' : ''}`} key={summary.label}>
+      {summaries.map((summary, index) => <div className={`card summary ${index === 0 ? 'balanceSummary' : ''}`} key={summary.id}>
         <div className="muted">{summary.label}</div>
         <div className={index === 0 ? 'balanceValueRow' : undefined}>
           <div className={`big ${summary.tone ?? ''}`}>{hidden && summary.mask ? maskValue(summary.value) : summary.value}</div>

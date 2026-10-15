@@ -29,13 +29,13 @@ export function PrivacyProvider({ children }: { children: React.ReactNode }) {
     try {
       const stored = localStorage.getItem('finance-privacy-hidden');
       if (stored === 'true') { setTimeout(() => setHidden(true), 0); }
-    } catch (e) {}
+    } catch {}
   }, []);
 
   const toggleHidden = () => {
     setHidden(prev => {
       const next = !prev;
-      try { localStorage.setItem('finance-privacy-hidden', String(next)); } catch (e) {}
+      try { localStorage.setItem('finance-privacy-hidden', String(next)); } catch {}
       return next;
     });
   };

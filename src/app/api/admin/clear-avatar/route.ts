@@ -1,25 +1,28 @@
-import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await request.json();
+    const contentLength = Number(request.headers.get('content-length') ?? 0);
+    if (contentLength > 8_192) return NextResponse.json({ error: 'Request too large' }, { status: 413 });
+    const raw = await request.text();
+    if (raw.length > 8_192) return NextResponse.json({ error: 'Request too large' }, { status: 413 });
+    let body: unknown;
+    try { body = JSON.parse(raw); } catch { return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }); }
+    const payload = body && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : null;
+    const userId = payload && typeof payload.userId === 'string' ? payload.userId.trim() : '';
 
     if (!userId) {
       return NextResponse.json({ error: 'userId required' }, { status: 400 });
     }
 
-    // Use admin API with service role key (server-side only)
-    const adminClient = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { persistSession: false } }
-    );
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (user.id !== userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     // Update user metadata to remove avatar_url
-    const { data, error } = await adminClient.auth.admin.updateUserById(userId, {
-      user_metadata: { avatar_url: null }
-    });
+    const { error } = await supabase.auth.updateUser({ data: { avatar_url: null } });
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });

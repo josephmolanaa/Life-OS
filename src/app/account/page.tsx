@@ -1,8 +1,10 @@
 "use client";
 
+import Image from 'next/image';
 import { FormEvent, useEffect, useState } from 'react';
 import { Shell } from '@/components/finance/layout';
 import { createClient } from '@/lib/supabase/client';
+import { ContentSkeleton } from '@/components/app-loading';
 
 const translations = {
   en: {
@@ -64,8 +66,8 @@ export default function AccountPage() {
   const t = translations[lang];
 
   useEffect(() => {
-    setLang(getLang());
     supabase.auth.getUser().then(({ data, error }) => {
+      setLang(getLang());
       if (error || !data.user) {
         window.location.replace('/login');
         return;
@@ -144,7 +146,7 @@ export default function AccountPage() {
 
       <div className="account-container">
         {loading ? (
-          <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text2)' }}>{t.loading}</div>
+          <ContentSkeleton blocks={2} />
         ) : (
           <form onSubmit={saveAccount}>
             {error && <div className="alert-box alert-error">
@@ -163,7 +165,7 @@ export default function AccountPage() {
                 onClick={handleAvatarClick}
                 title={t.avatarClick}
               >
-                {avatarUrl ? <img src={avatarUrl} alt={displayName} onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : initial}
+                {avatarUrl ? <Image unoptimized width={80} height={80} src={avatarUrl} alt={displayName} onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : initial}
               </button>
               <div className="account-title">
                 <h2>{displayName || 'User'}</h2>

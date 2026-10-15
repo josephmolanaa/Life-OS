@@ -1,21 +1,16 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
-const fallbackTodos = [
-  { id: 'fallback-1', label: 'Workout pagi (Physic)', done: false, streak: 0 },
-  { id: 'fallback-2', label: 'Baca buku 20 mnt (Social/Career)', done: false, streak: 0 },
-  { id: 'fallback-3', label: 'Journal / reflection (Discipline)', done: false, streak: 0 },
-  { id: 'fallback-4', label: 'Belajar AI 1 jam (Career)', done: false, streak: 0 },
-  { id: 'fallback-5', label: 'Push GitHub Streak (Career)', done: false, streak: 0 },
-];
-
-export async function GET() {
+export async function GET(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json(fallbackTodos);
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { data, error } = await supabase.from('todos').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
-  if (error) return NextResponse.json(fallbackTodos);
+  const kind = new URL(request.url).searchParams.get('kind') || 'daily';
+  if (!['daily', 'task'].includes(kind)) return NextResponse.json({ error: 'Invalid list kind' }, { status: 400 });
+  const { data, error } = await supabase.from('todos').select('*').eq('user_id', user.id).eq('list_kind', kind).order('created_at', { ascending: false });
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (kind === 'task') return NextResponse.json(data);
 
   // Rollover at 00:00
   const now = new Date();
@@ -26,13 +21,15 @@ export async function GET() {
     const todoDayStr = updatedAt.toDateString();
 
     if (todoDayStr !== todayStr && todo.done) {
-      await supabase.from('todos').update({ done: false }).eq('id', todo.id);
+      const { error: updateError } = await supabase.from('todos').update({ done: false }).eq('id', todo.id).eq('user_id', user.id);
+      if (updateError) throw updateError;
       return { ...todo, done: false };
     }
     return todo;
-  }));
+  })).catch(() => null);
+  if (!updatedData) return NextResponse.json({ error: 'Unable to reset daily quests' }, { status: 500 });
 
-  return NextResponse.json(updatedData || fallbackTodos);
+  return NextResponse.json(updatedData);
 }
 
 export async function POST(request: Request) {
@@ -40,10 +37,16 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { label } = await request.json();
-  if (!label) return NextResponse.json({ error: 'Label required' }, { status: 400 });
+  let body: unknown;
+  try { body = await request.json(); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+  const { label, priority, list_kind = 'daily', done = false } = body as { label?: unknown; priority?: unknown; list_kind?: unknown; done?: unknown };
+  if (!['daily', 'task'].includes(list_kind as string) || typeof done !== 'boolean') return NextResponse.json({ error: 'Invalid todo' }, { status: 400 });
+  if (typeof label !== 'string' || !label.trim() || label.trim().length > 120) return NextResponse.json({ error: 'Label must be 1–120 characters' }, { status: 400 });
+  if (priority !== undefined && !['LOW', 'MEDIUM', 'HIGH'].includes(priority as string)) return NextResponse.json({ error: 'Invalid priority' }, { status: 400 });
 
-  const { data, error } = await supabase.from('todos').insert({ user_id: user.id, label, done: false }).select().single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 200 });
+  const { data, error } = await supabase.from('todos').insert({ user_id: user.id, label: label.trim(), done, list_kind, priority: priority ?? 'MEDIUM' }).select().single();
+  if (error?.code === '23505') return NextResponse.json({ error: 'A todo with this label already exists' }, { status: 409 });
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data, { status: 201 });
 }

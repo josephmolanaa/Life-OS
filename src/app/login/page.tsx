@@ -57,7 +57,7 @@ export default function LoginPage() {
   return (
     <main style={{ minHeight: '100vh', background: 'var(--bg)', display: 'grid', placeItems: 'center', padding: '24px' }}>
       <section className="card" style={{ width: '100%', maxWidth: '440px', padding: '28px' }}>
-        <p className="muted" style={{ letterSpacing: '.32em', fontSize: '11px', textTransform: 'uppercase', margin: 0 }}>Life OS</p>
+        <p className="muted" style={{ letterSpacing: '.32em', fontSize: '11px', textTransform: 'uppercase', margin: 0 }}>Scaramouche</p>
         <h1 style={{ margin: '10px 0 8px', fontSize: '36px', lineHeight: 1, color: 'var(--text)' }}>
           {isRegister ? 'Register' : 'Login'}
         </h1>

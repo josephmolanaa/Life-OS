@@ -1,6 +1,5 @@
 -- Life OS core schema
 create extension if not exists "pgcrypto";
-
 create table if not exists public.wallets (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -12,6 +11,7 @@ create table if not exists public.wallets (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+create unique index if not exists wallets_id_user_id_key on public.wallets(id, user_id);
 
 create table if not exists public.categories (
   id uuid primary key default gen_random_uuid(),
@@ -24,12 +24,13 @@ create table if not exists public.categories (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+create unique index if not exists categories_id_user_id_key on public.categories(id, user_id);
 
 create table if not exists public.transactions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
-  wallet_id uuid not null references public.wallets(id) on delete cascade,
-  category_id uuid references public.categories(id) on delete set null,
+  wallet_id uuid not null,
+  category_id uuid,
   type text not null,
   amount numeric not null,
   transaction_date date not null,
@@ -37,23 +38,31 @@ create table if not exists public.transactions (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+alter table public.transactions drop constraint if exists transactions_wallet_id_fkey;
+alter table public.transactions drop constraint if exists transactions_category_id_fkey;
+alter table public.transactions add constraint transactions_wallet_owner_fkey foreign key (wallet_id, user_id) references public.wallets(id, user_id) on delete cascade;
+alter table public.transactions add constraint transactions_category_owner_fkey foreign key (category_id, user_id) references public.categories(id, user_id) on delete set null (category_id);
 
 create table if not exists public.transfers (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
-  from_wallet_id uuid not null references public.wallets(id) on delete cascade,
-  to_wallet_id uuid not null references public.wallets(id) on delete cascade,
+  from_wallet_id uuid not null,
+  to_wallet_id uuid not null,
   amount numeric not null,
   transfer_date date not null,
   note text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+alter table public.transfers drop constraint if exists transfers_from_wallet_id_fkey;
+alter table public.transfers drop constraint if exists transfers_to_wallet_id_fkey;
+alter table public.transfers add constraint transfers_from_wallet_owner_fkey foreign key (from_wallet_id, user_id) references public.wallets(id, user_id) on delete cascade;
+alter table public.transfers add constraint transfers_to_wallet_owner_fkey foreign key (to_wallet_id, user_id) references public.wallets(id, user_id) on delete cascade;
 
 create table if not exists public.loans (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
-  wallet_id uuid references public.wallets(id) on delete set null,
+  wallet_id uuid,
   direction text not null,
   person_name text not null,
   amount numeric not null,
@@ -64,16 +73,20 @@ create table if not exists public.loans (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+alter table public.loans drop constraint if exists loans_wallet_id_fkey;
+alter table public.loans add constraint loans_wallet_owner_fkey foreign key (wallet_id, user_id) references public.wallets(id, user_id) on delete set null (wallet_id);
 
 create table if not exists public.budgets (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
-  category_id uuid references public.categories(id) on delete cascade,
+  category_id uuid,
   month text not null,
   amount numeric not null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+alter table public.budgets drop constraint if exists budgets_category_id_fkey;
+alter table public.budgets add constraint budgets_category_owner_fkey foreign key (category_id, user_id) references public.categories(id, user_id) on delete cascade;
 
 create table if not exists public.btc_dca_logs (
   id uuid primary key default gen_random_uuid(),
