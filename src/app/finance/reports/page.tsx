@@ -51,7 +51,8 @@ export default async function Reports() {
   }
 
   return <Shell title={c.reportsTitle}>
-    <div className="reportTabs"><Link className="reportTab" href="/finance/reports/realtime">Realtime</Link><span className="reportTab active">Monthly</span><Link className="reportTab" href="/finance/reports/custom">Custom</Link></div>
+    <div className="editPageNav"><Link className="btn ghost" href="/finance">{String.fromCodePoint(8592)} {lang === 'id' ? 'Kembali ke Finance' : 'Back to Finance'}</Link></div>
+    <div className="reportTabs"><Link className="reportTab" href="/finance/reports/realtime">Realtime</Link><span className="reportTab active">Monthly</span></div>
     <div className="reportMonthList">
       {monthRows.map(row => <Link className="reportMonthBlock" key={row.month} href={`/finance/reports/${row.month}`}>
         <div className="reportMonthTitle">{monthRange(row.month, lang)}</div>

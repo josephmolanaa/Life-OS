@@ -40,12 +40,59 @@ export async function requireFinanceUser() {
   redirect('/login');
 }
 
+function missingSchemaItem(error: { code?: string; message?: string }, name: string) {
+  return ['42P01', '42703', 'PGRST204', 'PGRST205'].includes(error.code ?? '') && (error.message ?? '').includes(name);
+}
+
+async function allWalletSourceRows(supabase: Awaited<ReturnType<typeof createClient>>, table: string, userId: string) {
+  const rows = [];
+  for (let offset = 0; ; offset += 1000) {
+    const result = await supabase.from(table).select('*').eq('user_id', userId).order('id').range(offset, offset + 999);
+    if (result.error) return { data: null, error: result.error };
+    rows.push(...(result.data ?? []));
+    if ((result.data?.length ?? 0) < 1000) return { data: rows, error: null };
+  }
+}
+
+/** Read wallet data across the tracked schema (`wallets`) and the legacy view (`wallet_balances`). */
+async function loadWalletRows(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
+  const legacy = await allWalletSourceRows(supabase, 'wallet_balances', userId);
+  if (!legacy.error) return legacy.data ?? [];
+  if (!missingSchemaItem(legacy.error, 'wallet_balances')) throw new Error('Unable to load wallets', { cause: legacy.error });
+  const fallback = await allWalletSourceRows(supabase, 'wallets', userId);
+  if (fallback.error) throw new Error('Unable to load wallets', { cause: fallback.error });
+  const [transactions, transfers] = await Promise.all([
+    allWalletSourceRows(supabase, 'transactions', userId),
+    allWalletSourceRows(supabase, 'transfers', userId),
+  ]);
+  if (transactions.error || transfers.error) throw new Error('Unable to load wallet balances', { cause: transactions.error ?? transfers.error });
+  const balances = new Map<string, number>((fallback.data ?? []).map((wallet) => [wallet.id, Number(wallet.initial_balance ?? 0)]));
+  for (const row of transactions.data ?? []) {
+    const current = balances.get(row.wallet_id) ?? 0;
+    balances.set(row.wallet_id, current + (row.type === 'income' ? 1 : -1) * Number(row.amount));
+  }
+  for (const row of transfers.data ?? []) {
+    const amount = Number(row.amount);
+    balances.set(row.from_wallet_id, (balances.get(row.from_wallet_id) ?? 0) - amount);
+    balances.set(row.to_wallet_id, (balances.get(row.to_wallet_id) ?? 0) + amount);
+  }
+  return (fallback.data ?? []).map((wallet) => ({ ...wallet, balance: balances.get(wallet.id) ?? Number(wallet.initial_balance ?? 0) }));
+}
+
+/** Read both BTC column layouts used by deployed and freshly initialized databases. */
+async function loadBtcRows(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
+  const legacy = await supabase.from('btc_dca_logs').select('*').eq('user_id', userId).order('buy_date', { ascending: false });
+  if (!legacy.error) return legacy.data ?? [];
+  if (!missingSchemaItem(legacy.error, 'buy_date')) throw new Error('Unable to load BTC logs', { cause: legacy.error });
+  const canonical = await supabase.from('btc_dca_logs').select('*').eq('user_id', userId).order('log_date', { ascending: false });
+  if (canonical.error) throw new Error('Unable to load BTC logs', { cause: canonical.error });
+  return (canonical.data ?? []).map((row) => ({ ...row, buy_date: row.buy_date ?? row.log_date, exchange: row.exchange ?? null }));
+}
+
 export async function listWallets(userId?: string, activeOnly = false) {
   const { supabase, user } = await requireFinanceUser();
-  let query = supabase.from('wallet_balances').select('*').eq('user_id', userId ?? user.id).order('created_at');
-  if (activeOnly) query = query.eq('is_archived', false);
-  const { data } = await query;
-  return (data ?? []) as Wallet[];
+  const data = await loadWalletRows(supabase, userId ?? user.id);
+  return (activeOnly ? data.filter((wallet) => !wallet.is_archived) : data) as Wallet[];
 }
 
 export async function listActiveWallets(userId?: string) {
@@ -54,13 +101,14 @@ export async function listActiveWallets(userId?: string) {
 
 export async function getWallet(id: string) {
   const { supabase, user } = await requireFinanceUser();
-  const { data, error } = await supabase.from('wallet_balances').select('*').eq('id', id).eq('user_id', user.id).single();
-  return error || !data ? null : data as Wallet;
+  const rows = await loadWalletRows(supabase, user.id);
+  return (rows.find((wallet) => wallet.id === id) ?? null) as Wallet | null;
 }
 
 export async function listTransactions(userId?: string) {
   const { supabase, user } = await requireFinanceUser();
-  const { data } = await supabase.from('transactions').select('*').eq('user_id', userId ?? user.id).order('transaction_date', { ascending: false });
+  const { data, error } = await supabase.from('transactions').select('*').eq('user_id', userId ?? user.id).order('transaction_date', { ascending: false });
+  if (error) throw new Error('Unable to load transactions', { cause: error });
   return (data ?? []) as Transaction[];
 }
 
@@ -68,16 +116,19 @@ export async function requireFinance(month?: string) {
   const { supabase, user } = await requireFinanceUser();
   const bounds = monthBounds(month);
   const [wallets, categories, transactions, transfers, loans, budgets, btc, netWorth] = await Promise.all([
-    supabase.from('wallet_balances').select('*').eq('user_id', user.id).order('created_at'),
+    loadWalletRows(supabase, user.id),
     supabase.from('categories').select('*').eq('user_id', user.id).order('type').order('name'),
     supabase.from('transactions').select('*, categories(*), wallets(*)').eq('user_id', user.id).gte('transaction_date', bounds.start).lte('transaction_date', bounds.end).order('transaction_date', { ascending: false }),
     supabase.from('transfers').select('*').eq('user_id', user.id).order('transfer_date', { ascending: false }),
     supabase.from('loans').select('*').eq('user_id', user.id).order('loan_date', { ascending: false }),
     supabase.from('budgets').select('*, categories(*)').eq('user_id', user.id).eq('month', `${bounds.month}-01`),
-    supabase.from('btc_dca_logs').select('*').eq('user_id', user.id).order('buy_date', { ascending: false }),
+    loadBtcRows(supabase, user.id),
     supabase.from('net_worth_snapshots').select('*').eq('user_id', user.id).order('snapshot_date'),
   ]);
-  return { user, bounds, wallets: (wallets.data ?? []) as Wallet[], categories: (categories.data ?? []) as Category[], transactions: (transactions.data ?? []) as Transaction[], transfers: (transfers.data ?? []) as Transfer[], loans: (loans.data ?? []) as Loan[], budgets: (budgets.data ?? []) as Budget[], btc: (btc.data ?? []) as BtcDcaLog[], netWorth: (netWorth.data ?? []) as NetWorthSnapshot[] };
+  for (const result of [categories, transactions, transfers, loans, budgets, netWorth]) {
+    if (result.error) throw new Error('Unable to load finance data', { cause: result.error });
+  }
+  return { user, bounds, wallets: wallets as Wallet[], categories: (categories.data ?? []) as Category[], transactions: (transactions.data ?? []) as Transaction[], transfers: (transfers.data ?? []) as Transfer[], loans: (loans.data ?? []) as Loan[], budgets: (budgets.data ?? []) as Budget[], btc: btc as BtcDcaLog[], netWorth: (netWorth.data ?? []) as NetWorthSnapshot[] };
 }
 
 export function totals(data: Awaited<ReturnType<typeof requireFinance>>) {

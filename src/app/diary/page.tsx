@@ -6,6 +6,8 @@ import { getLang, copy, type Lang, type Translation } from "@/lib/i18n";
 import { ContentSkeleton } from "@/components/app-loading";
 import { createClient } from "@/lib/supabase/client";
 
+import { readDiaryDraft, writeDiaryDraft } from "@/lib/diary-draft";
+
 type Entry = { date: string; text: string; mood: string; updated: string };
 type DiaryUser = { id: string; email?: string | null };
 
@@ -71,6 +73,10 @@ export default function DiaryPage() {
       setMood(saved[today]?.mood || 'Okay');
       setExpectedUpdated(saved[today]?.updated ?? null);
       try {
+        const draft = readDiaryDraft(data.user.id);
+        if (draft) { setDate(draft.date); setText(draft.text); setMood(draft.mood); setExpectedUpdated(draft.expectedUpdated); setNotice('Draft restored / Draf dipulihkan.'); }
+      } catch { setError('Draft recovery unavailable. Keep this page open until saved. / Pemulihan draf tidak tersedia.'); }
+      try {
         setLegacyAvailable(!!localStorage.getItem('diary') && !localStorage.getItem(`diary-imported:${data.user.id}`));
       } catch { /* Database access still works when browser storage is unavailable. */ }
     }).catch(error => {
@@ -83,6 +89,7 @@ export default function DiaryPage() {
       sessionUser.current = nextUser;
       if (event === 'SIGNED_OUT' || accountChanged) {
         controller.abort();
+        try { if (activeUser.current) writeDiaryDraft(activeUser.current, null); } catch { /* Storage unavailable. */ }
         activeUser.current = null;
         setUser(null);
         setEntries({});
@@ -94,6 +101,17 @@ export default function DiaryPage() {
     });
     return () => { controller.abort(); subscription.unsubscribe(); activeUser.current = null; sessionUser.current = undefined; };
   }, []);
+
+  useEffect(() => {
+    if (loading || !user || activeUser.current !== user.id) return;
+    const dirty = isEditing && (text !== (entries[date]?.text || '') || mood !== (entries[date]?.mood || 'Okay'));
+    let mounted = true;
+    try { writeDiaryDraft(user.id, dirty ? { date, text, mood, expectedUpdated } : null); }
+    catch { if (dirty) queueMicrotask(() => { if (mounted) setError(id ? 'Draf belum dapat dicadangkan. Simpan sebelum meninggalkan halaman.' : 'Draft backup unavailable. Save before leaving this page.'); }); }
+    const warn = (event: BeforeUnloadEvent) => { if (dirty) { event.preventDefault(); event.returnValue = ''; } };
+    window.addEventListener('beforeunload', warn);
+    return () => { mounted = false; window.removeEventListener('beforeunload', warn); };
+  }, [loading, user, date, text, mood, expectedUpdated, isEditing, entries, id]);
 
   const prompt = useMemo(() => {
     const data = entries;
@@ -144,7 +162,7 @@ export default function DiaryPage() {
 
       if (entry.date === localDate()) {
         try {
-          const res = await fetch('/api/todos', { cache: 'no-store' });
+          const res = await fetch(`/api/todos?timeZone=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`, { cache: 'no-store' });
           if (!res.ok) throw new Error('Quest sync failed');
           const quests: { id: string; label: string; done: boolean }[] = await res.json();
           const journalTask = quests.find(task => /journal|reflection|diary/i.test(task.label));

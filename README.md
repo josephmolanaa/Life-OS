@@ -7,7 +7,8 @@ Personal command center for finance, activity, habits, and progress.
 - Next.js App Router
 - Supabase Auth + PostgreSQL
 - Recharts
-- PWA first
+- Installable web app; internet required for loading and saving account data.
+  Offline requests are not cached or queued. Local form drafts do not imply a saved record.
 - Electron desktop shell with GitHub release updates
 
 ## Run

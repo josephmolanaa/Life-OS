@@ -24,10 +24,10 @@ export default async function RealtimeReportPage() {
   const todayCashflow = todayIncome - todayExpense;
 
   return <Shell title={c.reportsTitle} quickFab={false}>
+    <div className="editPageNav"><Link className="btn ghost" href="/finance/reports">{String.fromCodePoint(8592)} {lang === 'id' ? 'Kembali ke laporan' : 'Back to reports'}</Link></div>
     <div className="reportTabs">
       <span className="reportTab active">Realtime</span>
       <Link className="reportTab" href="/finance/reports">Monthly</Link>
-      <Link className="reportTab" href="/finance/reports/custom">Custom</Link>
     </div>
     <div className="card reportPanel">
       <div className="reportMonthTitle">Today</div>

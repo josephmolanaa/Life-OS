@@ -7,7 +7,7 @@ export type WalletKind = 'cash' | 'bank' | 'ewallet' | 'crypto';
 
 export type Wallet = { id: string; user_id: string; name: string; type: WalletKind; currency: string; initial_balance: number; is_archived: boolean; balance?: number; created_at: string; updated_at: string };
 export type Category = { id: string; user_id: string; name: string; type: TransactionType; color: string; icon: string; is_default: boolean; created_at: string; updated_at: string };
-export type Transaction = { id: string; user_id: string; wallet_id: string; category_id: string; type: TransactionType; amount: number; transaction_date: string; note: string | null; created_at: string; updated_at: string; categories?: Category; wallets?: Wallet };
+export type Transaction = { id: string; user_id: string; wallet_id: string; category_id: string | null; type: TransactionType; amount: number; transaction_date: string; note: string | null; created_at: string; updated_at: string; categories?: Category; wallets?: Wallet };
 export type Transfer = { id: string; user_id: string; from_wallet_id: string; to_wallet_id: string; amount: number; transfer_date: string; note: string | null; created_at: string; updated_at: string };
 export type Loan = { id: string; user_id: string; wallet_id: string; direction: LoanDirection; person_name: string; amount: number; loan_date: string; due_date: string | null; status: LoanStatus; note: string | null; created_at: string; updated_at: string };
 export type Budget = { id: string; user_id: string; category_id: string; month: string; amount: number; categories?: Category };

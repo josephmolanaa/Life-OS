@@ -1,0 +1,18 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const ts = require('typescript');
+const source = fs.readFileSync('src/lib/study.ts', 'utf8');
+const mod = { exports: {} };
+new Function('exports', ts.transpile(source, { module: ts.ModuleKind.CommonJS }))(mod.exports);
+const id = mod.exports.getStudySchedule(true);
+const en = mod.exports.getStudySchedule(false);
+assert.equal(id.length, 6);
+assert.equal(new Set(id.map(course => course.code)).size, 6);
+assert.deepEqual(id.map(course => course.code), en.map(course => course.code));
+assert.equal(id[0].day, 'SENIN');
+assert.equal(en[0].day, 'MONDAY');
+for (const course of id) for (const field of ['code', 'course', 'day', 'time', 'room', 'lecturer']) assert.ok(course[field]);
+const rps = fs.readFileSync('src/app/study/rps/page.tsx', 'utf8');
+assert.ok(rps.includes('getStudySchedule(id)'));
+assert.ok(!/IF401|65%|CheckCircle2/.test(rps));
+console.log('Study schedule consistency: passed');

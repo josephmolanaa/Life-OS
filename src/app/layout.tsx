@@ -9,7 +9,7 @@ import { FloatingAiChat } from '@/components/floating-ai-chat';
 import { getLang } from '@/lib/i18n';
 
 export const metadata: Metadata = {
-  title: 'Scaramouche',
+  title: 'Life OS',
   description: 'Personal command center for finance, activity, habits, and progress.',
   manifest: '/manifest.webmanifest',
   icons: {
@@ -30,9 +30,7 @@ const themeScript = `
     var theme = localStorage.getItem('finance-theme');
     var sidebar = localStorage.getItem('finance-sidebar-collapsed');
     var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    if ((theme ? theme === 'dark' : prefersDark)) {
-      document.documentElement.classList.add('dark-mode');
-    }
+    document.documentElement.classList.toggle('dark-mode', theme ? theme === 'dark' : !!prefersDark);
     if (sidebar === 'true') {
       document.documentElement.classList.add('sidebar-collapsed');
     }

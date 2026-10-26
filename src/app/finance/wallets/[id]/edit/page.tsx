@@ -1,3 +1,4 @@
+import { ActionForm } from '@/components/finance/action-form';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { AmountInput } from '@/components/finance/amount-input';
@@ -19,7 +20,7 @@ export default async function EditWalletPage({ params }: { params: Promise<{ id:
       <Link className="btn ghost" href="/finance/wallets">{String.fromCodePoint(8592)} {lang === 'id' ? 'Kembali' : 'Back'}</Link>
       <form action={deleteWallet}><input type="hidden" name="id" value={w.id}/><ConfirmSubmit message={lang === 'id' ? 'Hapus wallet ini?' : 'Delete this wallet?'}>{t.delete}</ConfirmSubmit></form>
     </div>
-    <form className="card form editTransactionPageForm" action={updateWallet}>
+    <ActionForm className="card form editTransactionPageForm" action={updateWallet}>
       <input type="hidden" name="id" value={w.id}/>
       <b>{lang === 'id' ? 'Nama wallet' : 'Wallet name'}</b>
       <input className="input" name="name" defaultValue={w.name} required/>
@@ -32,7 +33,7 @@ export default async function EditWalletPage({ params }: { params: Promise<{ id:
       <input className="input" name="currency" defaultValue={w.currency}/>
       <AmountInput name="initial_balance" placeholder={t.initialBalancePlaceholder} defaultValue={Number(w.initial_balance)}/>
       <button className="btn">{t.saveEdit}</button>
-    </form>
+    </ActionForm>
   </Shell>;
 }
 

@@ -30,10 +30,16 @@ export async function POST(request: Request) {
   }
   const date = typeof body.date === 'string' ? body.date : null;
   if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return NextResponse.json({ error: 'Invalid date' }, { status: 400 });
-  const todayDate = new Date();
-  const today = `${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, '0')}-${String(todayDate.getDate()).padStart(2, '0')}`;
+  if (body.timeZone !== undefined && typeof body.timeZone !== 'string') return NextResponse.json({ error: 'Invalid time zone' }, { status: 400 });
+  const timeZone = body.timeZone as string | undefined ?? 'UTC';
+  let today: string;
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+    const part = (name: string) => parts.find(value => value.type === name)?.value;
+    today = `${part('year')}-${part('month')}-${part('day')}`;
+  } catch { return NextResponse.json({ error: 'Invalid time zone' }, { status: 400 }); }
   const storedDate = date ?? today;
-  const parsed = new Date(`${storedDate}T00:00:00`);
+  const parsed = new Date(`${storedDate}T00:00:00Z`);
   if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== storedDate || storedDate !== today) {
     return NextResponse.json({ error: 'Date must be today' }, { status: 400 });
   }

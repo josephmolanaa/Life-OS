@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ChevronRight, Download } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { ExpensePie } from '@/components/finance/charts';
 import { Shell } from '@/components/finance/layout';
 import { requireFinance, totals } from '@/lib/data';
@@ -68,7 +68,7 @@ export default async function ReportMonthDetail({ params, searchParams }: { para
   </>;
 
   return <Shell title="Report Details" quickFab={false}>
-    <div className="reportDetailTop"><Link href="/finance/reports">{String.fromCodePoint(8249)}</Link><b>Report Details</b><Download size={24}/></div>
+    <div className="reportDetailTop editPageNav"><Link className="btn ghost" href="/finance/reports">{String.fromCodePoint(8592)} {lang === 'id' ? 'Kembali ke laporan' : 'Back to reports'}</Link><b>{lang === 'id' ? 'Detail laporan' : 'Report details'}</b></div>
     <div className="reportDetailTabs">
       <Link className={view === 'chart' ? 'active' : ''} href={`/finance/reports/${month}?view=chart`}>Chart</Link>
       <Link className={view === 'category' ? 'active' : ''} href={`/finance/reports/${month}?view=category`}>Category</Link>

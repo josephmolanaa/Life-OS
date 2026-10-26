@@ -7,6 +7,7 @@ import { applyActivityRules } from '@/lib/activitywatch-rules';
 import type { ActivityRule, ActivityWatchItem } from '@/lib/activitywatch-types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { copy } from '@/lib/i18n';
+import { ActivityDayBreakdown } from '@/components/activity-day-breakdown';
 
 const categoryOptions = ['work', 'play', 'learn', 'admin', 'social', 'health', 'uncategorized'] as const;
 const rangeOptions = [
@@ -287,20 +288,6 @@ export default function ActivityPage() {
             background: var(--border2, #262522);
             border-radius: 4px;
           }
-          .category-select {
-            cursor: pointer;
-            font-size: 12px;
-            padding: 4px 8px;
-            border-radius: 6px;
-            border: 1px solid var(--border, #333);
-            background: var(--card-bg, #1a1917);
-            color: var(--text, #eae9e5);
-            outline: none;
-            transition: all 0.15s ease;
-          }
-          .category-select:hover {
-            border-color: var(--accent);
-          }
           .feed-item {
             padding: 10px 14px;
             border-radius: 8px;
@@ -546,6 +533,7 @@ export default function ActivityPage() {
             {/* Category Breakdown */}
             <section className="card" style={{ padding: '20px' }}>
               <h2 style={{ fontSize: '16px', fontWeight: 600, margin: '0 0 16px 0' }}>Category Breakdown</h2>
+              {range === '1d' && <ActivityDayBreakdown categories={categorySummary} colors={categoryColors} />}
               <div style={{ display: 'grid', gap: '14px' }}>
                 {categorySummary.map(([category, minutes]) => {
                   const pct = totalMinutes > 0 ? Math.round((minutes / totalMinutes) * 100) : 0;
@@ -602,12 +590,12 @@ export default function ActivityPage() {
                 value={filterCategory}
                 onChange={(e) => setFilterCategory(e.target.value)}
                 className="category-select"
-                style={{ height: '40px', padding: '0 12px' }}
+                aria-label="Filter kategori aktivitas"
               >
                 <option value="all">Semua Kategori</option>
                 {categoryOptions.map(cat => (
                   <option key={cat} value={cat}>
-                    {categoryEmojis[cat] || cat}
+                    {cat.charAt(0).toUpperCase() + cat.slice(1)}
                   </option>
                 ))}
               </select>
@@ -668,10 +656,11 @@ export default function ActivityPage() {
                               quickAssignCategory(item.app, e.target.value);
                             }}
                             className="category-select"
+                            aria-label={`Kategori ${item.display_name}`}
                           >
                             {categoryOptions.map((cat) => (
                               <option key={cat} value={cat}>
-                                {categoryEmojis[cat] || cat}
+                                {cat.charAt(0).toUpperCase() + cat.slice(1)}
                               </option>
                             ))}
                           </select>

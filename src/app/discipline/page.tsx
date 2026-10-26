@@ -54,7 +54,7 @@ export default function DisciplinePage() {
 
     // 2. Ambil data Habits (Daily Tasks) dari Supabase API
     try {
-      const res = await fetch('/api/todos', { cache: 'no-store' });
+      const res = await fetch(`/api/todos?timeZone=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`, { cache: 'no-store' });
       if (!res.ok) throw new Error(`Request failed: ${res.status}`);
       if (res.ok) {
         const todos: Array<{ done: boolean }> = await res.json();
@@ -124,7 +124,7 @@ export default function DisciplinePage() {
       try {
         const save = await fetch('/api/discipline', {
           method: 'POST', headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ ...roundedScores, date: localDate }),
+          body: JSON.stringify({ ...roundedScores, date: localDate, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
         });
         if (!save.ok) throw new Error('Discipline save failed');
         setSaveError(false);

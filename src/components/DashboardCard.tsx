@@ -12,7 +12,7 @@ export type DashboardCardProps = {
 };
 
 export function DashboardCard({ title, value, change, changeType, icon, action, link, linkText }: DashboardCardProps) {
-  const cardContent = (
+  return (
     <div className="card dashboard-card">
       <div className="card-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -31,11 +31,9 @@ export function DashboardCard({ title, value, change, changeType, icon, action, 
       </div>
       {link && (
         <div className="card-footer">
-          <span className="card-link">{linkText || 'View Details'}</span>
+          <Link href={link} className="card-link" style={{ display: 'flex', alignItems: 'center', minHeight: 44 }} aria-label={`${linkText || 'Open'} ${title}`}>{linkText || 'Open'}</Link>
         </div>
       )}
     </div>
   );
-
-  return link ? <Link href={link} className="card-link-wrapper">{cardContent}</Link> : cardContent;
 }

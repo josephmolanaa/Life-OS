@@ -6,28 +6,31 @@ export async function GET(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const kind = new URL(request.url).searchParams.get('kind') || 'daily';
+  const params = new URL(request.url).searchParams;
+  const kind = params.get('kind') || 'daily';
+  const timeZone = params.get('timeZone') || 'UTC';
+  let calendar: Intl.DateTimeFormat;
+  try { calendar = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }); }
+  catch { return NextResponse.json({ error: 'Invalid time zone' }, { status: 400 }); }
   if (!['daily', 'task'].includes(kind)) return NextResponse.json({ error: 'Invalid list kind' }, { status: 400 });
   const { data, error } = await supabase.from('todos').select('*').eq('user_id', user.id).eq('list_kind', kind).order('created_at', { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (kind === 'task') return NextResponse.json(data);
 
-  // Rollover at 00:00
-  const now = new Date();
-  const todayStr = now.toDateString();
-
-  const updatedData = await Promise.all((data || []).map(async (todo) => {
-    const updatedAt = new Date(todo.updated_at || todo.created_at || Date.now());
-    const todoDayStr = updatedAt.toDateString();
-
-    if (todoDayStr !== todayStr && todo.done) {
-      const { error: updateError } = await supabase.from('todos').update({ done: false }).eq('id', todo.id).eq('user_id', user.id);
+  // ponytail: updated_at tracks completion changes; add completion history before streaks.
+  const today = calendar.format(new Date());
+  const stale = (data || []).filter(todo => todo.done && calendar.format(new Date(todo.updated_at || todo.created_at)) !== today);
+  try {
+    await Promise.all(stale.map(async todo => {
+      const query = supabase.from('todos').update({ done: false }).eq('id', todo.id).eq('user_id', user.id).eq('done', true);
+      const { error: updateError } = await (todo.updated_at == null ? query.is('updated_at', null) : query.eq('updated_at', todo.updated_at));
       if (updateError) throw updateError;
-      return { ...todo, done: false };
-    }
-    return todo;
-  })).catch(() => null);
-  if (!updatedData) return NextResponse.json({ error: 'Unable to reset daily quests' }, { status: 500 });
+    }));
+  } catch { return NextResponse.json({ error: 'Unable to reset daily quests' }, { status: 500 }); }
+  if (!stale.length) return NextResponse.json(data);
+  // Read again: a concurrent completion must survive rollover and appear in this response.
+  const { data: updatedData, error: reloadError } = await supabase.from('todos').select('*').eq('user_id', user.id).eq('list_kind', kind).order('created_at', { ascending: false });
+  if (reloadError) return NextResponse.json({ error: 'Unable to reload daily quests' }, { status: 500 });
 
   return NextResponse.json(updatedData);
 }

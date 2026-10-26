@@ -1,3 +1,5 @@
+import { TransactionCategoryFields } from '@/components/finance/transaction-category-fields';
+import { ActionForm } from '@/components/finance/action-form';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { AmountInput } from '@/components/finance/amount-input';
@@ -23,23 +25,20 @@ export default async function EditTransactionPage({ params }: { params: Promise<
   if (transactionResult.error || !transactionResult.data) notFound();
 
   const transaction = transactionResult.data as Transaction;
-  const wallets = walletsResult;
+  const wallets = transaction.wallets && !walletsResult.some(wallet => wallet.id === transaction.wallet_id) ? [...walletsResult, transaction.wallets] : walletsResult;
+  if (categoriesResult.error) throw new Error(categoriesResult.error.message);
   const categories = (categoriesResult.data ?? []) as Category[];
 
   return <Shell title={lang === 'id' ? 'Edit transaksi' : 'Edit transaction'} quickFab={false}>
-    <div className="editPageNav"><Link className="btn ghost" href="/finance/transactions">{String.fromCodePoint(8592)} {lang === 'id' ? 'Kembali' : 'Back'}</Link><form action={deleteTransaction}><input type="hidden" name="id" value={transaction.id}/><ConfirmSubmit message={lang === 'id' ? 'Hapus transaksi ini?' : 'Delete this transaction?'}>{t.delete}</ConfirmSubmit></form></div>
-    <form className="card form editTransactionPageForm" action={updateTransaction}>
+    <div className="editPageNav"><Link className="btn ghost" href={`/finance/transactions?date=${transaction.transaction_date}`}>{String.fromCodePoint(8592)} {lang === 'id' ? 'Kembali ke transaksi' : 'Back to transactions'}</Link><form action={deleteTransaction}><input type="hidden" name="id" value={transaction.id}/><input type="hidden" name="date" value={transaction.transaction_date}/><ConfirmSubmit message={lang === 'id' ? 'Hapus transaksi ini?' : 'Delete this transaction?'}>{t.delete}</ConfirmSubmit></form></div>
+    <ActionForm className="card form editTransactionPageForm" action={updateTransaction} lang={lang}>
       <input type="hidden" name="id" value={transaction.id}/>
-      <div className="editTypeTabs">
-        <label><input type="radio" name="type" value="expense" defaultChecked={transaction.type === 'expense'}/><span>Expense</span></label>
-        <label><input type="radio" name="type" value="income" defaultChecked={transaction.type === 'income'}/><span>Income</span></label>
-      </div>
-      <input className="input" type="date" name="date" defaultValue={transaction.transaction_date}/>
-      <select className="input" name="wallet_id" required defaultValue={transaction.wallet_id}>{wallets.map(wallet => <option key={wallet.id} value={wallet.id}>{wallet.name}</option>)}</select>
-      <AmountInput name="amount" placeholder={t.amountPlaceholder} required defaultValue={Number(transaction.amount)}/>
-      <select className="input" name="category_id" required defaultValue={transaction.category_id}>{categories.map(category => <option key={category.id} value={category.id}>{category.type} - {category.name}</option>)}</select>
-      <input className="input" name="note" placeholder={t.notePlaceholder} defaultValue={transaction.note ?? ''}/>
+      <TransactionCategoryFields categories={categories} type={transaction.type} categoryId={transaction.category_id} lang={lang}/>
+      <label><span>{lang === 'id' ? 'Tanggal' : 'Date'}</span><input className="input" type="date" name="date" required defaultValue={transaction.transaction_date}/></label>
+      <label><span>{lang === 'id' ? 'Dompet' : 'Wallet'}</span><select className="input" name="wallet_id" required defaultValue={transaction.wallet_id}>{wallets.map(wallet => <option key={wallet.id} value={wallet.id}>{wallet.name}</option>)}</select></label>
+      <label><span>{lang === 'id' ? 'Jumlah' : 'Amount'}</span><AmountInput name="amount" placeholder={t.amountPlaceholder} required defaultValue={Number(transaction.amount)}/></label>
+      <label><span>{t.optionalNote}</span><textarea className="input" name="note" rows={3} defaultValue={transaction.note ?? ''}/></label>
       <div className="editTransactionButtons"><button className="btn">{t.saveEdit}</button></div>
-    </form>
+    </ActionForm>
   </Shell>;
 }

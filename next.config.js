@@ -5,6 +5,9 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: false,
   },
+  experimental: {
+    agentUpgrade: 'security',
+  },
 }
 
 module.exports = nextConfig

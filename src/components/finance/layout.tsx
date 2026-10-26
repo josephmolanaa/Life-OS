@@ -25,7 +25,7 @@ import {
   LogOut
 } from 'lucide-react';
 import { QuickFab } from './quick-fab';
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { getLang, type Lang } from '@/lib/i18n';
 
@@ -86,6 +86,8 @@ const navLabels: Record<Lang, Record<string, string>> = {
 };
 export function Topbar({ title }: { title: string }) {
   const [email, setEmail] = useState('');
+  const [lang, setLang] = useState<Lang>('en');
+  useEffect(() => { getLang().then(setLang); }, []);
   const [avatarUrl, setAvatarUrl] = useState('');
 
   useEffect(() => {
@@ -102,11 +104,11 @@ export function Topbar({ title }: { title: string }) {
     <div className="topbarRight">
       <ChromeControls />
       <details className="accountMenu">
-        <summary aria-label="Account menu"><span className="accountAvatar">{avatarUrl ? <Image unoptimized width={80} height={80} src={avatarUrl} alt="" /> : name[0]?.toUpperCase()}</span><ChevronDown size={12} aria-hidden="true" /></summary>
+        <summary aria-label={lang === 'id' ? 'Menu akun' : 'Account menu'}><span className="accountAvatar">{avatarUrl ? <Image unoptimized width={80} height={80} src={avatarUrl} alt="" /> : name[0]?.toUpperCase()}</span><ChevronDown size={12} aria-hidden="true" /></summary>
         <div className="accountDropdown">
-          <div><b>{name}</b><small>{email || 'Life OS account'}</small></div>
-          <Link href="/account" className="accountLogout" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Edit account</Link>
-          <form action={signOut}><button className="accountLogout">Logout</button></form>
+          <div><b>{name}</b><small>{email || (lang === 'id' ? 'Akun Life OS' : 'Life OS account')}</small></div>
+          <Link href="/account" className="accountLogout" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{lang === 'id' ? 'Edit akun' : 'Edit account'}</Link>
+          <form action={signOut}><button className="accountLogout">{lang === 'id' ? 'Keluar' : 'Sign out'}</button></form>
         </div>
       </details>
     </div>
@@ -131,6 +133,8 @@ function subscribeCompact(onChange: () => void) {
 
 export function BottomNav() {
   const pathname = usePathname();
+  const menuRef = useRef<HTMLDialogElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
   const savedGroups = useSyncExternalStore(subscribeSidebar, sidebarSnapshot, () => '{}');
   let collapsedGroups: Record<string, boolean> = {};
   try {
@@ -157,8 +161,9 @@ export function BottomNav() {
     window.dispatchEvent(new Event('lifeos-sidebar'));
   };
 
-  return <nav className="bottom" aria-label="Primary navigation">
-    <div className="navHead"><Image unoptimized width={32} height={32} className="navLogo" src="/icon2.ico" alt="" /><div className="navBrand"><span>Sch</span></div><SidebarToggleButton /></div>
+  return <>
+  <nav className="bottom desktopNavigation" aria-label={lang === 'id' ? 'Navigasi utama' : 'Primary navigation'}>
+    <div className="navHead"><Image unoptimized width={32} height={32} className="navLogo" src="/icon2.ico" alt="" /><div className="navBrand"><span>Life OS</span></div><SidebarToggleButton /></div>
     <div className="navScroll">
       {primaryNavGroups.map(group => {
         const isCollapsed = !!collapsedGroups[group.title];
@@ -188,7 +193,20 @@ export function BottomNav() {
       })}
       <form action={signOut}><button className="nav-item nav-footer-item nav-logout" type="submit" aria-label={lang === 'id' ? 'Keluar' : 'Sign Out'} title={lang === 'id' ? 'Keluar' : 'Sign Out'}><span className="nav-icon"><LogOut size={18} strokeWidth={2.1} aria-hidden="true" /></span><span className="nav-label">{lang === 'id' ? 'Keluar' : 'Sign Out'}</span></button></form>
     </div>
-  </nav>;
+  </nav>
+  <nav className="mobilePrimaryNav" aria-label={lang === 'id' ? 'Navigasi utama' : 'Primary navigation'}>
+    {['/', '/finance', '/habits', '/diary'].map(href => {
+      const item = navGroups.flatMap(group => group.items).find(item => item.href === href)!;
+      const active = pathname === href || (href === '/finance' && pathname.startsWith('/finance/'));
+      return <Link key={href} href={href} aria-current={active ? 'page' : undefined}><item.Icon size={20} aria-hidden="true" /><span>{href === '/finance' ? (lang === 'id' ? 'Keuangan' : 'Finance') : navLabels[lang][href]}</span></Link>;
+    })}
+    <button ref={menuButtonRef} type="button" aria-haspopup="dialog" onClick={() => menuRef.current?.showModal()}><LayoutGrid size={20} aria-hidden="true" /><span>{lang === 'id' ? 'Semua' : 'All'}</span></button>
+  </nav>
+  <dialog className="mobileNavigationDialog" ref={menuRef} aria-labelledby="mobile-menu-title" onClose={() => menuButtonRef.current?.focus()}>
+    <div className="mobileMenuHeading"><h2 id="mobile-menu-title">Life OS</h2><button type="button" onClick={() => menuRef.current?.close()}>{lang === 'id' ? 'Tutup' : 'Close'}</button></div>
+    {navGroups.map(group => <section key={group.title}><h3>{groupLabels[lang][group.title]}</h3><div className="mobileMenuLinks">{group.items.map(({ href, Icon }) => <Link key={href} href={href} aria-current={pathname === href ? 'page' : undefined} onClick={() => menuRef.current?.close()}><Icon size={20} aria-hidden="true" />{navLabels[lang][href]}</Link>)}</div></section>)}
+  </dialog>
+  </>;
 }
 export function Shell({ title, children, quickFab = true }: { title: string; children: React.ReactNode; quickFab?: boolean }) {
   

@@ -1,30 +1,16 @@
-﻿"use client";
+"use client";
 
-function getLifeOsDate() {
-  return toLifeOsDateKey(new Date());
-}
-
-function toLifeOsDateKey(date: Date) {
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
-  return local.toISOString().split("T")[0];
-}
-
-function parseLifeOsDate(date: string) {
-  const match = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) return new Date(date);
-  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-}
-
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { parseLocalTodos, todoStorageKey } from '@/lib/local-todos';
 import { DailyQuestCard } from './life-os-daily-quest';
+import { useDailyQuests } from './use-daily-quests';
 import { ModuleCards } from './life-os-module-cards';
 import { DashboardCard, type DashboardCardProps } from './DashboardCard';
 import {  Briefcase, HeartPulse, Users, Flame, Trash2, Plus, Pencil } from 'lucide-react';
 import { PrivacyAmount } from './finance/privacy-amount';
 import { PrivacyToggleButton } from './finance/privacy-toggle-button';
-import { getLang, copy, type Lang, type Translation } from '@/lib/i18n';
+import { getLang, copy, type Lang } from '@/lib/i18n';
 
 type LifeOsDashboardProps = {
   financeSummary: {
@@ -32,100 +18,77 @@ type LifeOsDashboardProps = {
     income: number;
     expense: number;
     savingRate: number;
-  };
+  } | null;
+  consistencyHistory?: Record<string, number>;
 };
 
 type TodoRow = { id: string; label: string; done: boolean; priority?: 'LOW' | 'MEDIUM' | 'HIGH' };
-type TodoItem = { id: string; label: string; done: boolean; streak: number };
-type ContribCell = { date: string; count: number };
 
-function mapTodoRows(rows: TodoRow[]): TodoItem[] {
-  return rows.map((row) => ({ ...row, streak: row.done ? 1 : 0 }));
-}
+const dateKey = (date: Date) => [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
 
-async function ensureTodos(): Promise<TodoItem[]> {
-  const response = await fetch('/api/todos', { cache: 'no-store' });
-  if (!response.ok) throw new Error('Failed to load todos');
-  const rows = (await response.json()) as TodoRow[];
-  return mapTodoRows(rows);
-}
+// GitHub-style contribution calendar: 53 week columns × 7 weekday rows, fixed cell size, 5 levels.
+function ConsistencyGraph({ todos, lang, history = {} }: { todos: { done: boolean }[]; lang: Lang; history?: Record<string, number> }) {
+  const id = lang === 'id';
+  const locale = id ? 'id-ID' : 'en-US';
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // Newest week sits on the right; start scrolled there on narrow screens like GitHub.
+  useEffect(() => { const el = scrollRef.current; if (el) el.scrollLeft = el.scrollWidth; }, []);
 
-function getInitialContribs(): ContribCell[] {
-  const cells: ContribCell[] = [];
-  const now = new Date();
-  const currentDay = now.getDay();
-  const endDate = new Date(now);
-  endDate.setDate(now.getDate() + (currentDay === 0 ? 0 : 7 - currentDay));
-  for (let i = 370; i >= 0; i--) {
-    const d = new Date(endDate);
-    d.setDate(endDate.getDate() - i);
-    cells.push({ date: toLifeOsDateKey(d), count: 0 });
-  }
-  return cells;
-}
-
-function ConsistencyGraph({ contribs, t, lang }: { contribs: ContribCell[]; t: Translation; lang: Lang }) {
-  const colors = ["var(--surface2)", "rgba(76, 175, 80, 0.25)", "rgba(76, 175, 80, 0.45)", "rgba(76, 175, 80, 0.70)", "var(--green)"];
+  const completed = todos.filter(todo => todo.done).length;
   const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const locale = lang === 'id' ? 'id-ID' : 'en-US';
-  const dateFormatter = new Intl.DateTimeFormat(locale, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-  const monthFormatter = new Intl.DateTimeFormat(locale, { month: 'short' });
-  const weeks = Array.from({ length: Math.ceil(contribs.length / 7) }, (_, index) => contribs.slice(index * 7, index * 7 + 7));
-  const monthLabels = weeks.map((week, index) => {
-    const firstMonthCell = week.find((cell) => parseLifeOsDate(cell.date).getDate() === 1) ?? (index === 0 ? week[0] : undefined);
-    return firstMonthCell ? monthFormatter.format(parseLifeOsDate(firstMonthCell.date)) : '';
+  const todayKey = dateKey(today);
+  const start = new Date(today);
+  start.setDate(today.getDate() - 364 - today.getDay());
+  const weeks: { date: string; count: number; future: boolean }[][] = [];
+  for (let index = 0; index < 371; index++) {
+    const date = new Date(start);
+    date.setDate(start.getDate() + index);
+    const key = dateKey(date);
+    if (index % 7 === 0) weeks.push([]);
+    weeks[weeks.length - 1].push({ date: key, count: history[key] ?? (key === todayKey ? completed : 0), future: key > todayKey });
+  }
+  const total = weeks.flat().reduce((sum, cell) => sum + (cell.future ? 0 : cell.count), 0);
+  // Label a column when its week contains the 1st of a month (first column only if its month has room).
+  const months: { label: string; column: number }[] = [];
+  weeks.forEach((week, column) => {
+    const first = week.find(cell => cell.date.endsWith('-01'));
+    if (!first && column !== 0) return;
+    if (column === 0 && week[0].date.slice(8) > '24') return;
+    months.push({ label: new Date(`${(first ?? week[0]).date}T00:00:00`).toLocaleDateString(locale, { month: 'short' }), column });
   });
-  const dayLabels = [t.mon, '', t.wed, '', t.fri, '', ''];
+  const level = (count: number) => Math.min(4, count);
+  const dayLabels = id ? ['', 'Sen', '', 'Rab', '', 'Jum', ''] : ['', 'Mon', '', 'Wed', '', 'Fri', ''];
+  const unit = id ? 'tugas selesai' : 'tasks completed';
 
-  return (
-    <section className="card" style={{ padding: "24px", display: "flex", flexDirection: "column" }}>
-      <div style={{ marginBottom: "18px" }}>
-        <h2 style={{ margin: 0, fontSize: "18px", fontWeight: 600 }}>{t.consistency}</h2>
+  return <section className="card consistencyCard" aria-label={id ? 'Grafik konsistensi' : 'Consistency graph'}>
+    <div className="consistencyHeader">
+      <h2>{total} {id ? 'tugas selesai dalam setahun terakhir' : 'tasks completed in the last year'}</h2>
+      <span className="consistencyToday">{id ? 'Hari ini' : 'Today'} {completed}/{todos.length}</span>
+    </div>
+    <div className="consistencyScroll" ref={scrollRef}>
+      <div className="consistencyCalendar" role="img" aria-label={`${total} ${unit}`}>
+        <div className="consistencyMonths" aria-hidden="true">{months.map(month => <span key={month.column} style={{ gridColumnStart: month.column + 1 }}>{month.label}</span>)}</div>
+        <div className="consistencyDayLabels" aria-hidden="true">{dayLabels.map((label, index) => <span key={index}>{label}</span>)}</div>
+        <div className="consistencyCells">{weeks.flat().map(cell => <span key={cell.date} data-level={cell.future ? undefined : level(cell.count)} className={cell.future ? 'isFuture' : undefined} title={cell.future ? undefined : `${cell.count} ${unit} · ${new Date(`${cell.date}T00:00:00`).toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' })}`} />)}</div>
       </div>
-      <div className="consistencyScroll">
-        <div className="consistencyGrid">
-          <div />
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${weeks.length}, 1fr)`, gap: '3px', color: 'var(--text2)', fontSize: '12px', lineHeight: 1 }} aria-hidden="true">
-            {monthLabels.map((label, index) => <span key={`${label}-${index}`} style={{ minWidth: 0 }}>{label}</span>)}
-          </div>
-          <div style={{ display: 'grid', gridTemplateRows: 'repeat(7, 1fr)', gap: '3px', color: 'var(--text2)', fontSize: '11px', alignItems: 'center' }} aria-hidden="true">
-            {dayLabels.map((label, index) => <span key={`${label}-${index}`} style={{ height: '100%', display: 'flex', alignItems: 'center' }}>{label}</span>)}
-          </div>
-          <div role="list" aria-label={t.consistency} style={{ display: "grid", gridTemplateColumns: `repeat(${weeks.length}, minmax(0, 1fr))`, gridTemplateRows: "repeat(7, 1fr)", gridAutoFlow: "column", gap: "3px", width: "100%" }}>
-          {weeks.flatMap((week) => week.map((cell) => {
-            const cellDate = parseLifeOsDate(cell.date);
-            const isFuture = cellDate > today;
-            const level = Math.min(4, cell.count);
-            const label = `${dateFormatter.format(cellDate)}: ${cell.count} ${t.tasksDone}`;
-            
-            return (
-              <div 
-                key={cell.date} 
-                role="listitem"
-                aria-hidden={isFuture}
-                aria-label={isFuture ? undefined : label}
-                title={isFuture ? undefined : label}
-                style={{ 
-                  aspectRatio: "1", 
-                  borderRadius: "2px", 
-                  background: isFuture ? "transparent" : colors[level], 
-                  border: isFuture ? "none" : (level === 0 ? "1px solid var(--border)" : "none"),
-                  opacity: isFuture ? 0 : 1
-                }} 
-              />
-            );
-          }))}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
+    </div>
+    <div className="consistencyLegend" aria-hidden="true">{id ? 'Sedikit' : 'Less'}{[0, 1, 2, 3, 4].map(value => <span key={value} data-level={value} />)}{id ? 'Banyak' : 'More'}</div>
+  </section>;
 }
 
-function EditableTodoList() {
+function DashboardQuestLoading({ lang }: { lang: Lang }) {
+  const id = lang === 'id';
+  return <section className="card dailyQuestCard dashboardInlineLoading" aria-busy="true" aria-label={id ? 'Memuat kebiasaan' : 'Loading habits'}>
+    <div className="dashboardLoadingHeader"><div><h2>{id ? 'Kebiasaan hari ini' : 'Today’s habits'}</h2><span className="loadingLine" /></div><span className="loadingLine dashboardLoadingIcon" /></div>
+    <div className="dashboardLoadingRows">{[0, 1, 2].map(index => <div className="dailyQuestItem" key={index}><span className="loadingLine dashboardLoadingCheck" /><span className="loadingLine" /><span className="loadingLine dashboardLoadingAction" /></div>)}</div>
+    <div className="dailyQuestForm"><span className="loadingLine" /><span className="loadingLine dashboardLoadingButton" /></div>
+  </section>;
+}
+function EditableTodoList({ lang }: { lang: Lang }) {
+  const id = lang === 'id';
   const [todos, setTodos] = useState<TodoRow[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
+  const [hasLegacy, setHasLegacy] = useState(false);
   const [newTodo, setNewTodo] = useState('');
   const [priority, setPriority] = useState<'LOW' | 'MEDIUM' | 'HIGH'>('MEDIUM');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -147,6 +110,7 @@ function EditableTodoList() {
     createClient().auth.getUser().then(({ data: { user } }) => {
       if (!active || !user) return;
       setUserId(user.id);
+      try { setHasLegacy(parseLocalTodos(localStorage.getItem(todoStorageKey(user.id))).length > 0 || parseLocalTodos(localStorage.getItem('editable-todos')).length > 0); } catch { /* Browser backups unavailable. */ }
     });
     return () => { active = false; };
   }, []);
@@ -176,33 +140,33 @@ function EditableTodoList() {
     });
   }
   return <section className="card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-    <h2 style={{ margin: '0 0 4px', fontSize: '18px', fontWeight: 600 }}>Todo List</h2>
-    <small className="muted" style={{ marginBottom: '16px' }}>Saved in database for this account</small>
+    <h2 style={{ margin: '0 0 4px', fontSize: '18px', fontWeight: 600 }}>{id ? 'Daftar tugas' : 'Tasks'}</h2>
+    <small className="muted" style={{ marginBottom: '16px' }}>{id ? 'Tugas tersimpan di akun; tidak direset setiap hari.' : 'Saved to your account; tasks do not reset daily.'}</small>
     {error && <p role="alert">{error}</p>}
-    {userId && <details style={{ marginBottom: '12px' }}>
-      <summary style={{ cursor: 'pointer' }}>Import saved browser todos</summary>
-      <p className="muted" style={{ margin: '8px 0' }}>Import into this account. Browser backup kept.</p>
+    {userId && hasLegacy && <details style={{ marginBottom: '12px' }}>
+      <summary style={{ cursor: 'pointer' }}>{id ? 'Impor tugas dari browser' : 'Import saved browser tasks'}</summary>
+      <p className="muted" style={{ margin: '8px 0' }}>{id ? 'Impor ke akun ini. Cadangan browser tetap tersedia.' : 'Import into this account. Browser backup kept.'}</p>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-        <button className="btn" disabled={busy || loading} onClick={() => importLegacy(todoStorageKey(userId))}>This account’s saved todos</button>
-        <button className="btn" disabled={busy || loading} onClick={() => importLegacy('editable-todos')}>Older browser todos</button>
+        <button className="btn" disabled={busy || loading} onClick={() => importLegacy(todoStorageKey(userId))}>{id ? 'Cadangan akun ini' : 'This account’s saved tasks'}</button>
+        <button className="btn" disabled={busy || loading} onClick={() => importLegacy('editable-todos')}>{id ? 'Cadangan browser lama' : 'Older browser tasks'}</button>
       </div>
     </details>}
-    {loading ? <p role="status">Loading todos...</p> : <div className="list" style={{ display: 'grid', gap: '8px', marginBottom: '20px' }}>
+    {loading ? <p role="status">{id ? 'Memuat tugas...' : 'Loading tasks...'}</p> : <div className="list" style={{ display: 'grid', gap: '8px', marginBottom: '20px' }}>
       {todos.map(todo => <div key={todo.id} style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px', padding: '12px', borderRadius: '8px', background: 'var(--surface2)' }}>
         <input type="checkbox" checked={todo.done} disabled={busy} aria-label={`Toggle ${todo.label}`} onChange={() => mutate(async () => {
           const saved = await request(`/api/todos/${todo.id}`, json('PUT', { done: !todo.done }));
           setTodos(current => current.map(row => row.id === todo.id ? saved : row));
         })} />
         <span style={{ flex: '1 1 100px', overflowWrap: 'anywhere', textDecoration: todo.done ? 'line-through' : 'none' }}>{todo.label}</span>
-        <small>{todo.priority || 'MEDIUM'}</small>
+        <small>{id ? ({ LOW: 'Rendah', MEDIUM: 'Sedang', HIGH: 'Tinggi' }[todo.priority || 'MEDIUM']) : todo.priority || 'MEDIUM'}</small>
         <button className="btn" disabled={busy} aria-label={`Edit ${todo.label}`} onClick={() => { setEditingId(todo.id); setNewTodo(todo.label); setPriority(todo.priority || 'MEDIUM'); }}><Pencil size={15}/></button>
-        <button className="btn" disabled={busy} aria-label={`Delete ${todo.label}`} onClick={() => mutate(async () => {
+        <button className="btn" disabled={busy} aria-label={`Delete ${todo.label}`} onClick={() => { if (!window.confirm(id ? 'Hapus tugas ini?' : 'Delete this task?')) return; void mutate(async () => {
           await request(`/api/todos/${todo.id}`, { method: 'DELETE' });
           setTodos(current => current.filter(row => row.id !== todo.id));
           if (editingId === todo.id) { setEditingId(null); setNewTodo(''); }
-        })}><Trash2 size={15}/></button>
+        }); }}><Trash2 size={15}/></button>
       </div>)}
-      {!todos.length && <p className="muted">No todos yet.</p>}
+      {!todos.length && <p className="muted">{id ? 'Belum ada tugas.' : 'No tasks yet.'}</p>}
     </div>}
     <form className="dailyQuestForm dailyQuestFormWithPriority" onSubmit={event => {
       event.preventDefault();
@@ -213,169 +177,92 @@ function EditableTodoList() {
         setNewTodo(''); setEditingId(null);
       });
     }}>
-      <input className="input" aria-label={editingId ? 'Edit todo' : 'New todo'} maxLength={120} required disabled={busy || loading} value={newTodo} onChange={event => setNewTodo(event.target.value)} placeholder="New todo..." />
-      <select className="input" aria-label="Todo priority" disabled={busy || loading} value={priority} onChange={event => setPriority(event.target.value as typeof priority)}><option>LOW</option><option>MEDIUM</option><option>HIGH</option></select>
-      <button type="submit" className="btn" disabled={busy || loading || !newTodo.trim()}>{editingId ? 'Save' : <><Plus size={14}/> Add</>}</button>
+      <input className="input" aria-label={id ? (editingId ? 'Ubah tugas' : 'Tugas baru') : (editingId ? 'Edit task' : 'New task')} maxLength={120} required disabled={busy || loading} value={newTodo} onChange={event => setNewTodo(event.target.value)} placeholder={id ? 'Tugas baru...' : 'New task...'} />
+      <select className="input" aria-label={id ? 'Prioritas tugas' : 'Task priority'} disabled={busy || loading} value={priority} onChange={event => setPriority(event.target.value as typeof priority)}><option value="LOW">{id ? 'Rendah' : 'Low'}</option><option value="MEDIUM">{id ? 'Sedang' : 'Medium'}</option><option value="HIGH">{id ? 'Tinggi' : 'High'}</option></select>
+      <button type="submit" className="btn" disabled={busy || loading || !newTodo.trim()}>{editingId ? (id ? 'Simpan' : 'Save') : <><Plus size={14}/> {id ? 'Tambah' : 'Add'}</>}</button>
     </form>
-    {editingId && <button className="btn" disabled={busy} onClick={() => { setEditingId(null); setNewTodo(''); }}>Cancel editing</button>}
+    {editingId && <button className="btn" disabled={busy} onClick={() => { setEditingId(null); setNewTodo(''); }}>{id ? 'Batal mengubah' : 'Cancel editing'}</button>}
   </section>;
 }
 
-export function LifeOsDashboard({ financeSummary }: LifeOsDashboardProps) {
+export function LifeOsDashboard({ financeSummary, consistencyHistory }: LifeOsDashboardProps) {
   const [lang, setLang] = useState<Lang>('en');
-  const [t, setT] = useState<Translation>(copy.en);
-
-  const [awStatus, setAwStatus] = useState('Checking...');
+  const t = copy[lang];
+  const id = lang === 'id';
+  const quests = useDailyQuests(lang);
+  const [awStatus, setAwStatus] = useState('...');
   const [awCategories, setAwCategories] = useState<Array<{ category: string; minutes: number }>>([]);
-  const [todos, setTodos] = useState<TodoItem[]>([]);
-  const [questsLoading, setQuestsLoading] = useState(true);
-  const [questError, setQuestError] = useState('');
-  const [initialContribs] = useState(getInitialContribs);
-  const today = getLifeOsDate();
-  const doneCount = todos.filter(todo => todo.done).length;
-  const contribs = initialContribs.map(cell => cell.date === today ? { ...cell, count: doneCount } : cell);
-
-  const [careerProgress, setCareerProgress] = useState('0%');
-  const [disciplineScore, setDisciplineScore] = useState('0%');
+  const [careerHours, setCareerHours] = useState<number | null>();
+  const [discipline, setDiscipline] = useState<{ score: number; date: string } | null>();
+  const [disciplineError, setDisciplineError] = useState(false);
 
   useEffect(() => {
-    getLang().then(l => {
-      setLang(l);
-      setT(copy[l]);
-    });
-
-    ensureTodos().then(fetched => {
-      setTodos(fetched);
-    }).catch(() => setQuestError('Daily quests could not be loaded. Please refresh and try again.'))
-      .finally(() => setQuestsLoading(false));
-
-    fetch('/api/career/hours').then(res => res.json()).then(data => {
-      if (data.summary) {
-        const logged = data.summary.reduce((a: number, b: { loggedHours?: number }) => a + (b.loggedHours || 0), 0);
-        setCareerProgress(`${Math.round(logged)}h logged`);
-      }
-    }).catch(() => {});
-
-    fetch('/api/discipline').then(res => res.json()).then(data => {
-      if (data && data.length > 0) {
-        setDisciplineScore(`${Math.round(data[0].total_score)}%`);
-      }
-    }).catch(() => {});
+    getLang().then(setLang);
+    fetch('/api/career/hours').then(async response => {
+      if (!response.ok) throw new Error();
+      const data = await response.json();
+      if (!Array.isArray(data.summary)) throw new Error();
+      setCareerHours(data.summary.reduce((total: number, skill: { loggedHours?: number }) => total + (skill.loggedHours || 0), 0));
+    }).catch(() => setCareerHours(null));
+    fetch('/api/discipline').then(async response => {
+      if (!response.ok) throw new Error();
+      const data = await response.json();
+      if (!Array.isArray(data)) throw new Error();
+      setDiscipline(data.length ? { score: data[0].total_score, date: data[0].date } : null);
+    }).catch(() => setDisciplineError(true));
   }, []);
 
   useEffect(() => {
+    let active = true;
     const fetchAw = async () => {
       try {
-        const res = await fetch('/api/activitywatch-data?range=1d');
-        if (!res.ok) throw new Error();
-        const data = await res.json();
-        const categoryMap: Record<string, number> = {};
-        
-        if (data.timelineData && data.timelineData.length > 0) {
-            data.timelineData.forEach((hour: Record<string, unknown>) => {
-                for (const key in hour) {
-                    if (key !== 'label' && key !== 'dateStr' && typeof hour[key] === 'number') {
-                        categoryMap[key] = (categoryMap[key] || 0) + (hour[key] as number);
-                    }
-                }
-            });
+        const response = await fetch('/api/activitywatch-data?range=1d');
+        if (!response.ok) throw new Error();
+        const data = await response.json();
+        const totals: Record<string, number> = {};
+        for (const hour of data.timelineData || []) {
+          for (const [key, value] of Object.entries(hour)) {
+            if (key !== 'label' && key !== 'dateStr' && typeof value === 'number') totals[key] = (totals[key] || 0) + value;
+          }
         }
-        
-        const sorted = Object.entries(categoryMap)
-            .map(([category, minutes]) => ({ category, minutes }))
-            .filter(cat => cat.minutes > 0)
-            .sort((a, b) => b.minutes - a.minutes);
-        
-        if (sorted.length) {
-            setAwCategories(sorted);
-            setAwStatus(data.status || 'Live Connected');
-        } else {
-            setAwCategories([]);
-            setAwStatus('No activity in 24h');
+        const categories = Object.entries(totals).map(([category, minutes]) => ({ category, minutes })).filter(row => row.minutes > 0).sort((a, b) => b.minutes - a.minutes);
+        if (active) {
+          setAwCategories(categories);
+          setAwStatus(categories.length ? (id ? 'Aktivitas 24 jam terakhir' : 'Activity in the last 24 hours') : (id ? 'Belum ada aktivitas dalam 24 jam' : 'No activity in the last 24 hours'));
         }
       } catch {
-        setAwStatus('Offline');
-        setAwCategories([]);
+        if (active) {
+          setAwStatus(id ? 'Aktivitas tidak tersedia. Buka ActivityWatch untuk mencoba lagi.' : 'Activity unavailable. Open ActivityWatch to retry.');
+          setAwCategories([]);
+        }
       }
     };
-
-    fetchAw();
+    void fetchAw();
     const interval = setInterval(fetchAw, 30000);
-    return () => clearInterval(interval);
-  }, []);
+    return () => { active = false; clearInterval(interval); };
+  }, [id]);
 
-  const handleUpdateHabit = async (id: string, label: string) => {
-    const nextTodos = todos.map((todo) => todo.id === id ? { ...todo, label } : todo);
-    setTodos(nextTodos);
-    await fetch(`/api/todos/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label }) });
-  };
-
-  const handleAddHabit = async (label: string) => {
-    setQuestError('');
-    try {
-      const response = await fetch('/api/todos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label }),
-      });
-      if (!response.ok) throw new Error('Failed to add daily quest');
-      const [quest] = mapTodoRows([await response.json() as TodoRow]);
-      setTodos((current) => [quest, ...current]);
-      return true;
-    } catch {
-      setQuestError('Daily quest could not be added. Please try again.');
-      return false;
-    }
-  };
-
-  const handleDeleteHabit = async (id: string) => {
-    if (!window.confirm('Delete this daily quest?')) return;
-    setQuestError('');
-    try {
-      const response = await fetch(`/api/todos/${id}`, { method: 'DELETE' });
-      if (!response.ok) throw new Error('Failed to delete daily quest');
-      setTodos((current) => current.filter((todo) => todo.id !== id));
-    } catch {
-      setQuestError('Daily quest could not be deleted. Please try again.');
-    }
-  };
-
-  const handleToggle = async (id: string, checked: boolean) => {
-    const nextTodos = todos.map((todo) => todo.id === id ? { ...todo, done: checked, streak: checked ? Math.max(1, todo.streak) : 0 } : todo);
-    setTodos(nextTodos);
-    await fetch(`/api/todos/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ done: checked }) });
-  };
-
+  const unavailable = id ? 'Gagal dimuat' : 'Unavailable';
+  const loading = id ? 'Memuat...' : 'Loading...';
+  const today = new Date();
+  const todayKey = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, '0'), String(today.getDate()).padStart(2, '0')].join('-');
   const pillars: DashboardCardProps[] = [
-    { title: t.financial, value: <PrivacyAmount value={`Rp ${financeSummary.totalBalance.toLocaleString('id-ID')}`} />, icon: <Briefcase />, action: <PrivacyToggleButton />, link: '/finance' },
-    { title: t.careerAi, value: careerProgress, icon: <Briefcase />, link: '/career' },
-    { title: 'Physique', value: t.active, icon: <HeartPulse />, link: '/physique' },
-    { title: 'Social', value: t.good, icon: <Users />, link: '/social' },
-    { title: 'Discipline', value: disciplineScore, icon: <Flame />, link: '/discipline' },
+    { title: t.financial, value: financeSummary ? <PrivacyAmount value={`Rp ${financeSummary.totalBalance.toLocaleString('id-ID')}`} /> : unavailable, icon: <Briefcase />, action: <PrivacyToggleButton />, link: '/finance' },
+    { title: t.careerAi, value: careerHours === undefined ? loading : careerHours === null ? unavailable : `${Math.round(careerHours)} ${id ? 'jam tercatat' : 'hours logged'}`, icon: <Briefcase />, link: '/career' },
+    { title: id ? 'Fisik' : 'Physique', value: id ? 'Catatan latihan' : 'Workout log', icon: <HeartPulse />, link: '/physique' },
+    { title: id ? 'Sosial' : 'Social', value: id ? 'Relasi & aktivitas' : 'People & activity', icon: <Users />, link: '/social' },
+    { title: id ? 'Disiplin' : 'Discipline', value: disciplineError ? unavailable : discipline === undefined ? loading : discipline ? `${Math.round(discipline.score)}% (${discipline.date === todayKey ? (id ? 'hari ini' : 'today') : discipline.date})` : (id ? 'Belum dicatat' : 'No entries'), icon: <Flame />, link: '/discipline' },
   ];
 
-  return (
-    <div className="lifeDashboard">
-      <div className="dashboardPillars">
-        {pillars.map(p => <DashboardCard key={p.title} {...p} />)}
-      </div>
-
-      <ConsistencyGraph contribs={contribs} t={t} lang={lang} />
-
-      <div className="dashboardSplit">
-        {questsLoading
-          ? <div className="card skeletonBlock" aria-label="Loading daily quests" />
-          : <DailyQuestCard todos={todos} onToggle={handleToggle} onAdd={handleAddHabit} onUpdate={handleUpdateHabit} onDelete={handleDeleteHabit} error={questError} />}
-        <EditableTodoList />
-      </div>
-
-      <ModuleCards financeSummary={{ income: financeSummary.income, expense: financeSummary.expense }} awStatus={awStatus} awCategories={awCategories} />
+  return <div className="lifeDashboard">
+    <div className="dashboardSplit">
+      {quests.loading ? <DashboardQuestLoading lang={lang} /> : <DailyQuestCard {...quests} lang={lang} />}
+      <EditableTodoList lang={lang} />
     </div>
-  );
+    <div className="dashboardPillars">
+      {pillars.map(pillar => <DashboardCard key={pillar.title} {...pillar} linkText={id ? 'Buka' : 'Open'} />)}
+    </div>
+    <ConsistencyGraph todos={quests.todos} lang={lang} history={consistencyHistory} />
+    <ModuleCards financeSummary={financeSummary} awStatus={awStatus} awCategories={awCategories} lang={lang} />
+  </div>;
 }
-
-
-
-
-
-

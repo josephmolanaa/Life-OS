@@ -1,3 +1,4 @@
+import { ActionForm } from '@/components/finance/action-form';
 import Link from 'next/link';
 import { Bitcoin, DatabaseBackup, Landmark, Tags, TrendingUp, WalletCards } from 'lucide-react';
 import { Shell } from '@/components/finance/layout';
@@ -18,6 +19,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
 
   return <Shell title={t.settingsTitle}>
     <div className="settingsPage">
+      <div className="editPageNav"><Link className="btn ghost" href="/finance">{String.fromCodePoint(8592)} {id ? 'Kembali ke Finance' : 'Back to Finance'}</Link></div>
       {params.error && <div className="notice error">{params.error}</div>}
 
       <div className="settingsOverview">
@@ -62,7 +64,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
           </div>
           <Tags size={22} aria-hidden="true" />
         </div>
-        <form className="settingsCreateForm" action={createCategory}>
+        <ActionForm className="settingsCreateForm" action={createCategory}>
           <label className="settingsField" htmlFor="category-name">
             <span>{id ? 'Nama kategori' : 'Category name'}</span>
             <input id="category-name" className="input" name="name" placeholder={id ? 'Contoh: Liburan' : 'Example: Travel'} required />
@@ -77,7 +79,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
           </label>
           <input type="hidden" name="icon" value="circle" />
           <button className="btn settingsCreateButton">{id ? 'Simpan kategori' : 'Save category'}</button>
-        </form>
+        </ActionForm>
       </section>
 
       <section className="card settingsSection">
@@ -120,14 +122,14 @@ function CategoryGroup({ title, categories, deleteLabel, saveLabel, emptyLabel, 
   return <section className="settingsGroup">
     <div className="settingsGroupHeader"><b>{title}</b><span className="pill">{categories.length}</span></div>
     {categories.length === 0 ? <p className="muted noMargin">{emptyLabel}</p> : <div className="list settingsCategoryList">{categories.map((category) => <div className="item categoryEditItem" key={category.id}>
-      <form className="categoryEditForm" action={updateCategory}>
+      <ActionForm className="categoryEditForm" action={updateCategory}>
         <input type="hidden" name="id" value={category.id} />
         <select className="input compactInput" name="type" defaultValue={category.type} aria-label={`${category.name} type`}><option value="income">Income</option><option value="expense">Expense</option></select>
         <input className="input" name="name" defaultValue={category.name} aria-label={`${category.name} name`} required />
         <input className="input colorInput" name="color" type="color" defaultValue={category.color} aria-label={`${category.name} color`} />
         <input type="hidden" name="icon" value={category.icon || 'circle'} />
         <button className="btn ghost" aria-label={`${saveLabel} ${category.name}`}>{saveLabel}</button>
-      </form>
+      </ActionForm>
       <form action={deleteCategory}><input type="hidden" name="id" value={category.id} /><ConfirmSubmit message={confirm} className="btn danger" ariaLabel={`${deleteLabel} ${category.name}`}>{deleteLabel}</ConfirmSubmit></form>
     </div>)}</div>}
   </section>;

@@ -12,6 +12,7 @@ create table if not exists public.wallets (
   updated_at timestamptz not null default now()
 );
 create unique index if not exists wallets_id_user_id_key on public.wallets(id, user_id);
+create unique index if not exists wallets_user_name_key on public.wallets(user_id, name);
 
 create table if not exists public.categories (
   id uuid primary key default gen_random_uuid(),
@@ -25,6 +26,7 @@ create table if not exists public.categories (
   updated_at timestamptz not null default now()
 );
 create unique index if not exists categories_id_user_id_key on public.categories(id, user_id);
+create unique index if not exists categories_user_name_type_key on public.categories(user_id, name, type);
 
 create table if not exists public.transactions (
   id uuid primary key default gen_random_uuid(),
@@ -85,6 +87,7 @@ create table if not exists public.budgets (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+create unique index if not exists budgets_user_category_month_key on public.budgets(user_id, category_id, month);
 alter table public.budgets drop constraint if exists budgets_category_id_fkey;
 alter table public.budgets add constraint budgets_category_owner_fkey foreign key (category_id, user_id) references public.categories(id, user_id) on delete cascade;
 
@@ -92,6 +95,7 @@ create table if not exists public.btc_dca_logs (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   log_date date not null,
+  exchange text,
   btc_amount numeric not null,
   fiat_amount numeric not null,
   fee_amount numeric not null default 0,
@@ -99,6 +103,8 @@ create table if not exists public.btc_dca_logs (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.btc_dca_logs add column if not exists exchange text;
 
 create table if not exists public.net_worth_snapshots (
   id uuid primary key default gen_random_uuid(),

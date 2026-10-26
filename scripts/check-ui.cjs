@@ -50,6 +50,13 @@ require.extensions['.tsx'] = function loadTypeScriptJsx(module, filename) {
   module._compile(compiled, filename);
 };
 
+const { ActivityDayBreakdown } = loadComponent('src/components/activity-day-breakdown.tsx');
+const dayBar = categories => renderToStaticMarkup(React.createElement(ActivityDayBreakdown, { categories, colors: { work: '#3b82f6' } }));
+assert.match(dayBar([['work', 360]]), /flex:0\.25 1 0%/);
+assert.match(dayBar([['work', 360]]), /18h 0m untracked/);
+assert.match(dayBar([]), /24h 0m untracked/);
+assert.match(dayBar([['work', 1500]]), /Recorded time exceeds 24h/);
+assert.doesNotMatch(dayBar([['bad', NaN], ['negative', -30]]), /NaN|negative/);
 const { DailyQuestCard } = loadComponent('src/components/life-os-daily-quest.tsx');
 const { AppLoading, ContentSkeleton, PageLoading } = loadComponent('src/components/app-loading.tsx');
 const { default: RootLoading } = loadComponent('src/app/loading.tsx');
@@ -57,9 +64,13 @@ const aiConfig = loadComponent('src/lib/ai-config.ts');
 const { copy } = loadComponent('src/lib/i18n.ts');
 const financePage = fs.readFileSync(path.join(__dirname, '..', 'src/app/finance/page.tsx'), 'utf8');
 const summaryIds = [...financePage.matchAll(/\{ id: '([^']+)', label: c\./g)].map(([, id]) => id);
-assert.equal(summaryIds.length, 4, 'Finance summaries must have stable IDs');
-assert.equal(new Set(summaryIds).size, summaryIds.length, 'Finance summary IDs must be unique');
-assert.match(fs.readFileSync(path.join(__dirname, '..', 'src/components/finance/finance-home-client.tsx'), 'utf8'), /key=\{summary\.id\}/);
+if (summaryIds.length) {
+  assert.equal(summaryIds.length, 4, 'Finance summaries must have stable IDs');
+  assert.equal(new Set(summaryIds).size, summaryIds.length, 'Finance summary IDs must be unique');
+} else {
+  assert.match(financePage, /financeWidgetGrid/, 'Finance dashboard must render the widget layout');
+  assert.equal((financePage.match(/className="financeWidget financeHero"/g) || []).length, 1, 'Finance dashboard must have a single primary chart');
+}
 for (const [lang, translations] of Object.entries(copy)) {
   for (const [, key] of financePage.matchAll(/\bc\.(\w+)/g)) {
     assert.ok(translations[key]?.trim(), `Missing finance translation: ${lang}.${key}`);
@@ -84,7 +95,8 @@ assert.match(dashboardSource, /disabled=\{busy \|\| loading \|\| !newTodo\.trim\
 const app = renderToStaticMarkup(React.createElement(AppLoading));
 assert.match(app, /aria-busy="true"/);
 assert.equal((app.match(/dashboard-card skeletonCard/g) || []).length, 5);
-assert.equal((app.match(/consistencySkeletonGrid/g) || []).length, 1);
+assert.doesNotMatch(app, /consistencySkeletonGrid/, 'Do not imply history that is not stored');
+assert.ok(app.indexOf('dashboardSplit') < app.indexOf('dashboardPillars'), 'Daily actions must precede metrics');
 assert.match(app, /dashboardSplit/);
 assert.match(app, /moduleSkeleton/);
 assert.match(renderToStaticMarkup(React.createElement(PageLoading, { variant: 'list', blocks: 4 })), /listLoadingRows/);
@@ -126,15 +138,17 @@ assert.match(renderToStaticMarkup(React.createElement(RootLoading)), /pageLoadin
 assert.ok(appLoadingSource.includes("pathname.startsWith('/finance/reports/')") && appLoadingSource.includes('variant="report-detail"'));
 
 const financeLoading = renderToStaticMarkup(React.createElement(PageLoading, { title: 'Finance Home', variant: 'finance' }));
-assert.equal((financeLoading.match(/class="card summary"/g) || []).length, 4, 'Finance loading must render 4 metrics');
-assert.equal((financeLoading.match(/class="reportTab"/g) || []).length, 6, 'Finance loading must render 6 tabs');
+assert.match(financeLoading, /financeWidgetGrid/, 'Finance loading must match the dashboard widget layout');
+assert.equal((financeLoading.match(/class="financeWidget financeHero"/g) || []).length, 1, 'Finance loading must render a single primary chart');
 
 const scheduleLoading = renderToStaticMarkup(React.createElement(PageLoading, { title: 'Class Schedule', variant: 'schedule' }));
 assert.equal((scheduleLoading.match(/<th>/g) || []).length, 7, 'Schedule loading must render 7 columns');
 assert.equal((scheduleLoading.match(/<tr/g) || []).length - 1, 6, 'Schedule loading must render 6 body rows');
 
+assert.ok(scheduleLoading.includes('studyScheduleCards'), 'Schedule loading must include the mobile card layout');
+
 const rpsLoading = renderToStaticMarkup(React.createElement(PageLoading, { title: 'RPS', variant: 'rps' }));
-assert.equal((rpsLoading.match(/class="card"/g) || []).length, 3, 'RPS loading must render 3 cards');
+assert.equal((rpsLoading.match(/class="card"/g) || []).length, 7, 'RPS loading must render a notice and 6 actual course cards');
 
 const settingsLoading = renderToStaticMarkup(React.createElement(PageLoading, { title: 'Settings', variant: 'settings' }));
 assert.equal((settingsLoading.match(/class="providerCard"/g) || []).length, 3, 'Settings loading must render provider cards');
