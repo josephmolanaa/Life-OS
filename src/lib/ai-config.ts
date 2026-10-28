@@ -1,4 +1,4 @@
-export type AiProviderId = 'openai' | 'anthropic' | 'openrouter' | '9router' | 'custom';
+export type AiProviderId = 'openai' | 'anthropic' | 'openrouter' | '9router' | 'hermes' | 'custom';
 
 export type AiConfig = { provider: AiProviderId; model: string; baseUrl: string };
 export type ChatMessage = { role: 'user' | 'assistant'; content: string };
@@ -19,6 +19,7 @@ export const aiProviders: Record<AiProviderId, { label: string; baseUrl: string 
   openai: { label: 'OpenAI', baseUrl: 'https://api.openai.com/v1' },
   anthropic: { label: 'Anthropic (Claude)', baseUrl: 'https://api.anthropic.com/v1' },
   openrouter: { label: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1' },
+  hermes: { label: 'Hermes Agent', baseUrl: 'http://localhost:11434/v1' },
   '9router': { label: '9Router', baseUrl: '' },
   custom: { label: 'Custom (OpenAI-compatible)', baseUrl: '' },
 };

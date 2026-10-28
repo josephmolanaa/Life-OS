@@ -1,6 +1,6 @@
 {
   "name": "life-os",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "private": true,
   "main": "electron/main.cjs",
   "scripts": {
@@ -20,7 +20,7 @@
     "electron-updater": "^6.8.9",
     "fs-extra": "^11.3.0",
     "lucide-react": "^0.475.0",
-    "next": "16.4.0",
+    "next": "16.4.3",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "recharts": "^2.15.1"
@@ -32,7 +32,7 @@
     "electron": "44.7.0",
     "electron-builder": "^26.0.12",
     "eslint": "^9.39.5",
-    "eslint-config-next": "16.4.0",
+    "eslint-config-next": "16.4.3",
     "typescript": "^5.8.2"
   },
   "build": {
@@ -49,7 +49,8 @@
         "to": "app-server",
         "filter": [
           "**/*",
-          "!**/.env*"
+          "!**/.env.local",
+          "!**/.env.development"
         ]
       },
       {

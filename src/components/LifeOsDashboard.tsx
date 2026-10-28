@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { parseLocalTodos, todoStorageKey } from '@/lib/local-todos';
+import { filterTasks } from '@/lib/task-view';
 import { DailyQuestCard } from './life-os-daily-quest';
 import { useDailyQuests } from './use-daily-quests';
 import { ModuleCards } from './life-os-module-cards';
@@ -11,6 +12,7 @@ import {  Briefcase, HeartPulse, Users, Flame, Trash2, Plus, Pencil } from 'luci
 import { PrivacyAmount } from './finance/privacy-amount';
 import { PrivacyToggleButton } from './finance/privacy-toggle-button';
 import { getLang, copy, type Lang } from '@/lib/i18n';
+import { DailyQuestSkeleton, TodoRowsSkeleton } from './skeleton';
 
 type LifeOsDashboardProps = {
   financeSummary: {
@@ -24,54 +26,66 @@ type LifeOsDashboardProps = {
 
 type TodoRow = { id: string; label: string; done: boolean; priority?: 'LOW' | 'MEDIUM' | 'HIGH' };
 
+const dateKey = (date: Date) => [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
+
+// GitHub-style contribution calendar: 53 week columns × 7 weekday rows, fixed cell size, 5 levels.
 function ConsistencyGraph({ todos, lang, history = {} }: { todos: { done: boolean }[]; lang: Lang; history?: Record<string, number> }) {
+  const id = lang === 'id';
+  const locale = id ? 'id-ID' : 'en-US';
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // Newest week sits on the right; start scrolled there on narrow screens like GitHub.
+  useEffect(() => { const el = scrollRef.current; if (el) el.scrollLeft = el.scrollWidth; }, []);
+
   const completed = todos.filter(todo => todo.done).length;
   const today = new Date();
+  const todayKey = dateKey(today);
   const start = new Date(today);
-  start.setDate(today.getDate() - 364);
-  start.setDate(start.getDate() - start.getDay());
-  const todayKey = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, '0'), String(today.getDate()).padStart(2, '0')].join('-');
-  const cells = Array.from({ length: 371 }, (_, index) => {
+  start.setDate(today.getDate() - 364 - today.getDay());
+  const weeks: { date: string; count: number; future: boolean }[][] = [];
+  for (let index = 0; index < 371; index++) {
     const date = new Date(start);
     date.setDate(start.getDate() + index);
-    const key = [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
-    return { date: key, count: history[key] ?? (key === todayKey ? completed : 0) };
-  });
-  const weeks = Array.from({ length: 53 }, (_, week) => cells.slice(week * 7, week * 7 + 7));
-  let previousMonthIndex = -4;
-  const monthLabels = weeks.map((week, index) => {
+    const key = dateKey(date);
+    if (index % 7 === 0) weeks.push([]);
+    weeks[weeks.length - 1].push({ date: key, count: history[key] ?? (key === todayKey ? completed : 0), future: key > todayKey });
+  }
+  const total = weeks.flat().reduce((sum, cell) => sum + (cell.future ? 0 : cell.count), 0);
+  // Label a column when its week contains the 1st of a month (first column only if its month has room).
+  const months: { label: string; column: number }[] = [];
+  weeks.forEach((week, column) => {
     const first = week.find(cell => cell.date.endsWith('-01'));
-    if (!first && index !== 0) return '';
-    // Leave enough columns between labels so short months never touch each other.
-    if (index - previousMonthIndex < 4) return '';
-    const value = first?.date ?? week[0]?.date;
-    previousMonthIndex = index;
-    return value ? new Date(`${value}T00:00:00`).toLocaleDateString(lang === 'id' ? 'id-ID' : 'en-US', { month: 'short' }) : '';
+    if (!first && column !== 0) return;
+    if (column === 0 && week[0].date.slice(8) > '24') return;
+    months.push({ label: new Date(`${(first ?? week[0]).date}T00:00:00`).toLocaleDateString(locale, { month: 'short' }), column });
   });
-  const id = lang === 'id';
-  const dayLabels = id ? ['Min', '', 'Sel', '', 'Kam', '', 'Sab'] : ['Sun', '', 'Tue', '', 'Thu', '', 'Sat'];
+  const level = (count: number) => Math.min(4, count);
+  const dayLabels = id ? ['', 'Sen', '', 'Rab', '', 'Jum', ''] : ['', 'Mon', '', 'Wed', '', 'Fri', ''];
+  const unit = id ? 'tugas selesai' : 'tasks completed';
+
   return <section className="card consistencyCard" aria-label={id ? 'Grafik konsistensi' : 'Consistency graph'}>
-    <div className="consistencyHeader"><div><h2>{id ? 'Grafik konsistensi' : 'Consistency graph'}</h2><p className="muted">{id ? 'Aktivitas checklist selama setahun' : 'Checklist activity over the last year'}</p></div><strong>{completed}/{todos.length || 0}</strong></div>
-    <div className="consistencyScroll" role="img" aria-label={`${completed} ${id ? 'tugas selesai hari ini' : 'tasks completed today'}`}>
-      <div className="consistencyYearGrid">
-        <div className="consistencyMonths" aria-hidden="true">{monthLabels.map((label, index) => <span key={`${label}-${index}`}>{label}</span>)}</div>
+    <div className="consistencyHeader">
+      <h2>{total} {id ? 'tugas selesai dalam setahun terakhir' : 'tasks completed in the last year'}</h2>
+      <span className="consistencyToday">{id ? 'Hari ini' : 'Today'} {completed}/{todos.length}</span>
+    </div>
+    <div className="consistencyScroll" ref={scrollRef}>
+      <div className="consistencyCalendar" role="img" aria-label={`${total} ${unit}`}>
+        <div className="consistencyMonths" aria-hidden="true">{months.map(month => <span key={month.column} style={{ gridColumnStart: month.column + 1 }}>{month.label}</span>)}</div>
         <div className="consistencyDayLabels" aria-hidden="true">{dayLabels.map((label, index) => <span key={index}>{label}</span>)}</div>
-        <div className="consistencyWeekGrid">{weeks.map((week, weekIndex) => <div className="consistencyWeek" key={weekIndex}>{week.map(({ date, count }) => <span key={date} className={count ? `isDone consistencyLevel${Math.min(4, count)}` : ''} title={`${date}: ${count} ${id ? 'tugas selesai' : 'tasks completed'}`} />)}</div>)}</div>
+        <div className="consistencyCells">{weeks.flat().map(cell => <span key={cell.date} data-level={cell.future ? undefined : level(cell.count)} className={cell.future ? 'isFuture' : undefined} title={cell.future ? undefined : `${cell.count} ${unit} · ${new Date(`${cell.date}T00:00:00`).toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' })}`} />)}</div>
       </div>
     </div>
+    <div className="consistencyLegend" aria-hidden="true">{id ? 'Sedikit' : 'Less'}{[0, 1, 2, 3, 4].map(value => <span key={value} data-level={value} />)}{id ? 'Banyak' : 'More'}</div>
   </section>;
 }
 
 function DashboardQuestLoading({ lang }: { lang: Lang }) {
-  const id = lang === 'id';
-  return <section className="card dailyQuestCard dashboardInlineLoading" aria-busy="true" aria-label={id ? 'Memuat kebiasaan' : 'Loading habits'}>
-    <div className="dashboardLoadingHeader"><div><h2>{id ? 'Kebiasaan hari ini' : 'Today’s habits'}</h2><span className="loadingLine" /></div><span className="loadingLine dashboardLoadingIcon" /></div>
-    <div className="dashboardLoadingRows">{[0, 1, 2].map(index => <div className="dailyQuestItem" key={index}><span className="loadingLine dashboardLoadingCheck" /><span className="loadingLine" /><span className="loadingLine dashboardLoadingAction" /></div>)}</div>
-    <div className="dailyQuestForm"><span className="loadingLine" /><span className="loadingLine dashboardLoadingButton" /></div>
-  </section>;
+  return <div role="status" aria-busy="true" aria-label={lang === 'id' ? 'Memuat kebiasaan' : 'Loading habits'} style={{ display: 'grid' }}><DailyQuestSkeleton /></div>;
 }
-function EditableTodoList({ lang }: { lang: Lang }) {
+export function EditableTodoList({ lang, expanded = false }: { lang: Lang; expanded?: boolean }) {
   const id = lang === 'id';
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('active');
+  const mutationPending = useRef(false);
   const [todos, setTodos] = useState<TodoRow[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [hasLegacy, setHasLegacy] = useState(false);
@@ -81,6 +95,7 @@ function EditableTodoList({ lang }: { lang: Lang }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const visibleTodos = expanded ? filterTasks(todos, filter, search) : todos;
 
   async function request(url: string, options?: RequestInit) {
     const response = await fetch(url, { cache: 'no-store', ...options });
@@ -102,11 +117,13 @@ function EditableTodoList({ lang }: { lang: Lang }) {
   }, []);
 
   async function mutate(action: () => Promise<void>) {
+    if (mutationPending.current) return;
+    mutationPending.current = true;
     setBusy(true);
     setError('');
     try { await action(); }
     catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to save todo'); }
-    finally { setBusy(false); }
+    finally { mutationPending.current = false; setBusy(false); }
   }
   const json = (method: string, body: unknown): RequestInit => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   async function importLegacy(key: string) {
@@ -128,6 +145,14 @@ function EditableTodoList({ lang }: { lang: Lang }) {
   return <section className="card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
     <h2 style={{ margin: '0 0 4px', fontSize: '18px', fontWeight: 600 }}>{id ? 'Daftar tugas' : 'Tasks'}</h2>
     <small className="muted" style={{ marginBottom: '16px' }}>{id ? 'Tugas tersimpan di akun; tidak direset setiap hari.' : 'Saved to your account; tasks do not reset daily.'}</small>
+    {expanded && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+      <input className="input" type="search" aria-label={id ? 'Cari tugas' : 'Search tasks'} placeholder={id ? 'Cari tugas…' : 'Search tasks…'} value={search} onChange={event => setSearch(event.target.value)} />
+      <select className="input" aria-label={id ? 'Status tugas' : 'Task status'} value={filter} onChange={event => setFilter(event.target.value as typeof filter)}>
+        <option value="active">{id ? 'Aktif' : 'Active'} ({todos.filter(todo => !todo.done).length})</option>
+        <option value="completed">{id ? 'Selesai' : 'Completed'} ({todos.filter(todo => todo.done).length})</option>
+        <option value="all">{id ? 'Semua' : 'All'} ({todos.length})</option>
+      </select>
+    </div>}
     {error && <p role="alert">{error}</p>}
     {userId && hasLegacy && <details style={{ marginBottom: '12px' }}>
       <summary style={{ cursor: 'pointer' }}>{id ? 'Impor tugas dari browser' : 'Import saved browser tasks'}</summary>
@@ -137,8 +162,8 @@ function EditableTodoList({ lang }: { lang: Lang }) {
         <button className="btn" disabled={busy || loading} onClick={() => importLegacy('editable-todos')}>{id ? 'Cadangan browser lama' : 'Older browser tasks'}</button>
       </div>
     </details>}
-    {loading ? <p role="status">{id ? 'Memuat tugas...' : 'Loading tasks...'}</p> : <div className="list" style={{ display: 'grid', gap: '8px', marginBottom: '20px' }}>
-      {todos.map(todo => <div key={todo.id} style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px', padding: '12px', borderRadius: '8px', background: 'var(--surface2)' }}>
+    {loading ? <div role="status" aria-busy="true" aria-label={id ? 'Memuat tugas' : 'Loading tasks'}><TodoRowsSkeleton /></div> : <div className="list" style={{ display: 'grid', gap: '8px', marginBottom: '20px' }}>
+      {visibleTodos.map(todo => <div key={todo.id} style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px', padding: '12px', borderRadius: '8px', background: 'var(--surface2)' }}>
         <input type="checkbox" checked={todo.done} disabled={busy} aria-label={`Toggle ${todo.label}`} onChange={() => mutate(async () => {
           const saved = await request(`/api/todos/${todo.id}`, json('PUT', { done: !todo.done }));
           setTodos(current => current.map(row => row.id === todo.id ? saved : row));
@@ -152,7 +177,7 @@ function EditableTodoList({ lang }: { lang: Lang }) {
           if (editingId === todo.id) { setEditingId(null); setNewTodo(''); }
         }); }}><Trash2 size={15}/></button>
       </div>)}
-      {!todos.length && <p className="muted">{id ? 'Belum ada tugas.' : 'No tasks yet.'}</p>}
+      {!visibleTodos.length && <p className="muted">{id ? 'Tidak ada tugas dalam tampilan ini. Tambahkan tugas atau ubah filter.' : 'No tasks in this view. Add a task or change the filter.'}</p>}
     </div>}
     <form className="dailyQuestForm dailyQuestFormWithPriority" onSubmit={event => {
       event.preventDefault();

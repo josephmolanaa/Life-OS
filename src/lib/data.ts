@@ -1,11 +1,13 @@
 ﻿import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { createClient } from './supabase/server';
+import { SUPABASE_URL } from './supabase/constants';
 import { monthBounds } from './finance';
 import type { BtcDcaLog, Budget, Category, Loan, NetWorthSnapshot, Transaction, Transfer, Wallet } from './types';
 
 function readAuthSession(cookieHeader: string) {
-  const projectRef = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).hostname.split('.')[0];
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || SUPABASE_URL;
+  const projectRef = new URL(url).hostname.split('.')[0];
   const cookiePrefix = `sb-${projectRef}-auth-token`;
   const chunks = cookieHeader
     .split(';')

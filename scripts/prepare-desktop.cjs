@@ -14,6 +14,19 @@ if (!fs.existsSync(standalone)) {
 fs.cpSync(publicDir, path.join(standalone, 'public'), { recursive: true });
 fs.cpSync(staticDir, path.join(standalone, '.next', 'static'), { recursive: true });
 
+// Always write bundled environment config for Next.js standalone runtime in production desktop
+const desktopEnvPath = path.join(standalone, '.env.production');
+const defaultSupabaseUrl = 'https://vvwmtfzatvwcedxqmxtk.supabase.co';
+const defaultSupabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ2d210ZnphdHZ3Y2VkeHFteHRrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk1Njc2NzAsImV4cCI6MjA5NTE0MzY3MH0.KaBcN-VqOzoEUc5_HxgQ9U-qMhEAhBT0xeBJ9HxJWnM';
+
+const envContent = [
+  `NEXT_PUBLIC_SUPABASE_URL=${process.env.NEXT_PUBLIC_SUPABASE_URL || defaultSupabaseUrl}`,
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY=${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || defaultSupabaseKey}`,
+  'LIFE_OS_LOCAL_AI=1',
+  '',
+].join('\n');
+fs.writeFileSync(desktopEnvPath, envContent);
+
 // Owner identity is not a secret. Package only these two allow-list values;
 // never copy the complete .env.local into the installer.
 const envPath = path.join(projectRoot, '.env.local');

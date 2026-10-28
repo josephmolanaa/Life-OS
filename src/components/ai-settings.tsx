@@ -178,7 +178,7 @@ function AiProviderForm({ lang }: { lang: 'en' | 'id' }) {
   }
 
   const id = lang === 'id';
-  const providerEntries = (['openai', 'anthropic', '9router'] as AiProviderId[]).map((providerId) => [providerId, aiProviders[providerId]] as const);
+  const providerEntries = (['openai', 'anthropic', '9router', 'hermes'] as AiProviderId[]).map((providerId) => [providerId, aiProviders[providerId]] as const);
   const providerName = aiProviders[config.provider]?.label ?? config.provider;
 
   return <section className="card aiSettingsCard aiConnectionCard" aria-labelledby="ai-settings-title">
@@ -191,14 +191,18 @@ function AiProviderForm({ lang }: { lang: 'en' | 'id' }) {
       <div className="settingsField">
         <span>Provider</span>
         <div className="providerPicker">
-          {providerEntries.map(([providerId, item]) => <button type="button" key={providerId} aria-pressed={provider === providerId} className={`providerCard ${provider === providerId ? 'selected' : ''}`} onClick={() => changeProvider(providerId)}><strong>{item.label}</strong><small>{providerId === 'openai' ? (id ? 'Default OpenAI' : 'OpenAI default') : providerId === 'anthropic' ? 'Claude' : 'OpenAI-compatible'}</small></button>)}
+          {providerEntries.map(([providerId, item]) => <button type="button" key={providerId} aria-pressed={provider === providerId} className={`providerCard ${provider === providerId ? 'selected' : ''}`} onClick={() => changeProvider(providerId)}><strong>{item.label}</strong><small>{providerId === 'openai' ? (id ? 'Default OpenAI' : 'OpenAI default') : providerId === 'anthropic' ? 'Claude' : providerId === 'hermes' ? 'Nous Hermes / Local Agent' : 'OpenAI-compatible'}</small></button>)}
         </div>
       </div>
       <div className="aiDirectGrid">
-        <label className="settingsField" htmlFor="ai-base-url"><span>API base URL</span><input id="ai-base-url" className="input" type="url" value={baseUrl} readOnly={provider !== '9router' && provider !== 'custom'} onChange={(event) => { setBaseUrl(event.target.value); setKey(''); }} placeholder="https://api.example.com/v1" maxLength={500} required /></label>
-        <label className="settingsField" htmlFor="ai-model"><span>Model ID</span><input id="ai-model" className="input" list="ai-model-options" value={model} onChange={(event) => setModel(event.target.value)} placeholder={id ? 'Model ID dari provider' : 'Model ID from provider'} maxLength={120} required /><datalist id="ai-model-options">{models.map((item) => <option key={item} value={item} />)}</datalist></label>
-        <label className="settingsField aiKeyField" htmlFor="ai-api-key"><span>API key</span><input id="ai-api-key" className="input" type="password" autoComplete="new-password" value={key} onChange={(event) => setKey(event.target.value)} placeholder={hasKey ? (id ? 'Tersimpan, isi untuk mengganti' : 'Saved, enter to replace') : 'sk-…'} maxLength={512} /></label>
+        <label className="settingsField" htmlFor="ai-base-url"><span>API base URL</span><input id="ai-base-url" className="input" type="url" value={baseUrl} readOnly={provider !== '9router' && provider !== 'custom' && provider !== 'hermes'} onChange={(event) => { setBaseUrl(event.target.value); setKey(''); }} placeholder={provider === 'hermes' ? 'http://localhost:11434/v1' : 'https://api.example.com/v1'} maxLength={500} required /></label>
+        <label className="settingsField" htmlFor="ai-model"><span>Model ID</span><input id="ai-model" className="input" list="ai-model-options" value={model} onChange={(event) => setModel(event.target.value)} placeholder={provider === 'hermes' ? 'hermes-3-llama-3.1-8b' : (id ? 'Model ID dari provider' : 'Model ID from provider')} maxLength={120} required /><datalist id="ai-model-options">{models.map((item) => <option key={item} value={item} />)}</datalist></label>
+        <label className="settingsField aiKeyField" htmlFor="ai-api-key"><span>API key</span><input id="ai-api-key" className="input" type="password" autoComplete="new-password" value={key} onChange={(event) => setKey(event.target.value)} placeholder={hasKey ? (id ? 'Tersimpan, isi untuk mengganti' : 'Saved, enter to replace') : (provider === 'hermes' ? (id ? 'Opsional untuk lokal (mis. ollama)' : 'Optional for local (e.g. ollama)') : 'sk-…')} maxLength={512} /></label>
       </div>
+      {provider === 'hermes' && models.length === 0 && <div className="modelsList" aria-label="Hermes presets" style={{ marginTop: '8px' }}>
+        <span className="muted" style={{ fontSize: '11px', alignSelf: 'center' }}>Preset:</span>
+        {['hermes-3-llama-3.1-8b', 'nous-hermes-2-mixtral', 'hermes-3-llama-3.1-70b'].map(preset => <button type="button" key={preset} className="modelTag" onClick={() => setModel(preset)}>{preset}</button>)}
+      </div>}
       {models.length > 0 && <div className="modelsList" aria-label={id ? 'Model tersedia' : 'Available models'}>{models.slice(0, 10).map(m => <button type="button" key={m} className="modelTag" onClick={() => setModel(m)}>{m}</button>)}</div>}
       <div className="aiWizardActions">
         <button type="button" className="btn ghost" disabled={!ready || isChecking} onClick={() => void checkConnection()}>{isChecking ? (id ? 'Mengecek…' : 'Checking…') : (id ? 'Tes koneksi' : 'Test connection')}</button>

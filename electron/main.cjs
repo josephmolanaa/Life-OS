@@ -173,6 +173,8 @@ async function startProductionServer() {
       HOSTNAME: '127.0.0.1',
       NODE_ENV: 'production',
       PORT: String(port),
+      NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://vvwmtfzatvwcedxqmxtk.supabase.co',
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ2d210ZnphdHZ3Y2VkeHFteHRrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk1Njc2NzAsImV4cCI6MjA5NTE0MzY3MH0.KaBcN-VqOzoEUc5_HxgQ9U-qMhEAhBT0xeBJ9HxJWnM',
       ...(typeof activityWatchOwner.id === 'string' && activityWatchOwner.id.length <= 128 ? { ACTIVITYWATCH_OWNER_ID: activityWatchOwner.id } : {}),
       ...(typeof activityWatchOwner.email === 'string' && activityWatchOwner.email.length <= 320 ? { ACTIVITYWATCH_OWNER_EMAIL: activityWatchOwner.email } : {}),
     },
@@ -232,20 +234,22 @@ function configureAutoUpdater() {
   autoUpdater.allowPrerelease = false;
   autoUpdater.on('error', (error) => console.error('Auto-update failed:', error));
   autoUpdater.on('update-available', (info) => {
-    console.log('Update available:', info.version);
+    const version = info?.version || '';
+    console.log('Update available:', version);
     if (Notification.isSupported()) {
       new Notification({
         title: 'Life OS Update',
-        body: `Versi baru v${info.version} tersedia dan sedang diunduh di latar belakang.`,
+        body: version ? `Versi baru v${version} tersedia dan sedang diunduh di latar belakang.` : 'Versi baru tersedia dan sedang diunduh di latar belakang.',
       }).show();
     }
   });
   autoUpdater.on('update-downloaded', (info) => {
-    console.log('Update downloaded:', info.version);
+    const version = info?.version || '';
+    console.log('Update downloaded:', version);
     if (Notification.isSupported()) {
       const notification = new Notification({
         title: 'Life OS Siap Diperbarui',
-        body: `Versi v${info.version} selesai diunduh. Klik di sini untuk me-restart dan memasang pembaruan sekarang.`,
+        body: version ? `Versi v${version} selesai diunduh. Klik di sini untuk me-restart dan memasang pembaruan sekarang.` : 'Pembaruan selesai diunduh. Klik di sini untuk me-restart dan memasang pembaruan sekarang.',
       });
       notification.on('click', () => {
         autoUpdater.quitAndInstall(false, true);

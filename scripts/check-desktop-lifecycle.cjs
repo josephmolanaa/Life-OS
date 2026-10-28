@@ -8,6 +8,7 @@ const { spawn, spawnSync } = require('node:child_process');
 
 const source = fs.readFileSync(path.join(__dirname, '..', 'electron', 'main.cjs'), 'utf8');
 const tempDirs = [];
+let lastNotification;
 function tempDirectory(prefix) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   tempDirs.push(directory);
@@ -71,7 +72,7 @@ function launch({ args = [], packaged = true, userData = tempDirectory('lifeos-t
   const Menu = { setApplicationMenu() {}, buildFromTemplate: (template) => ({ template }) };
   const ipcMain = { handle() {} };
   class NotificationMock extends EventEmitter {
-    constructor(options) { super(); this.options = options; }
+    constructor(options) { super(); this.options = options; lastNotification = this; }
     static isSupported() { return true; }
     show() {}
   }
@@ -224,7 +225,8 @@ if (process.versions.electron) {
   assert.equal(autoStart.windows[0].visible, false, 'Windows startup should create a hidden window');
   autoStart.windows[0].emit('session-end');
   assert.equal(autoStart.spawned[0].killed, true, 'Windows shutdown should stop the bundled server');
-  first.updater.emit('update-downloaded');
+  first.updater.emit('update-downloaded', { version: '1.0.8' });
+  lastNotification?.emit('click');
   assert.equal(first.quits, 1);
   assert.equal(first.spawned[0].killed, true, 'update quit should stop the bundled server');
 
