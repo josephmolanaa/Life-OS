@@ -81,6 +81,7 @@ function launch({ args = [], packaged = true, userData = tempDirectory('lifeos-t
   updater.checkForUpdatesAndNotify = () => Promise.resolve();
   updater.quitAndInstall = () => app.quit();
   const modules = {
+    'node:crypto': require('node:crypto'),
     electron,
     'electron-updater': { autoUpdater: updater },
     'node:child_process': { spawn: () => { const child = new EventEmitter(); child.kill = () => { child.killed = true; }; spawned.push(child); return child; } },

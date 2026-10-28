@@ -5,6 +5,15 @@ const path = require('node:path');
 const Module = require('node:module');
 const ts = require('typescript');
 const root = path.join(__dirname, '..');
+const mainSource = fs.readFileSync(path.join(root, 'electron/main.cjs'), 'utf8');
+const preloadSource = fs.readFileSync(path.join(root, 'electron/preload.cjs'), 'utf8');
+for (const channel of ['lifeos:activity-status', 'lifeos:activity-set', 'lifeos:activity-data']) {
+  assert.ok(mainSource.includes(channel), `Missing desktop handler: ${channel}`);
+  assert.ok(preloadSource.includes(channel), `Missing preload bridge: ${channel}`);
+}
+for (const name of ['LIFE_OS_DESKTOP_ACTIVITY', 'LIFE_OS_ACTIVITY_SECRET', 'LIFE_OS_ACTIVITY_PERMISSIONS']) {
+  assert.ok(mainSource.includes(name), `Missing desktop server environment: ${name}`);
+}
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'lifeos-consent-test-'));
 const originalLoad = Module._load;
 let user = { id: 'account-a', email: 'test@example.invalid' };

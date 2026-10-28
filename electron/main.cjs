@@ -4,6 +4,48 @@ const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
 
+const { randomBytes } = require('node:crypto');
+const activitySecret = randomBytes(32).toString('hex');
+let activityEpoch = 0;
+
+async function activityRequest(event, operation, input) {
+  assertLocalWindow(event);
+  if (!app.isPackaged) throw new Error('Activity permissions require the packaged desktop app');
+  const origin = `http://127.0.0.1:${port}`;
+  const cookies = async () => (await event.sender.session.cookies.get({ url: origin })).map(c => `${c.name}=${c.value}`).sort().join('; ');
+  const cookie = await cookies();
+  const epoch = ++activityEpoch;
+  let route = '/api/activitywatch-permission';
+  const options = { method: 'GET', redirect: 'error', headers: { Cookie: cookie, 'x-lifeos-activity': activitySecret, 'Content-Type': 'application/json' } };
+  if (operation === 'set') {
+    if (typeof input !== 'boolean') throw new Error('Invalid permission');
+    options.method = 'POST';
+    options.body = JSON.stringify({ allowed: input });
+  } else if (operation === 'data') {
+    if (!input || !['4h', '1d', '1w', '1m'].includes(input.range) || !/^\d{4}-\d{2}-\d{2}$/.test(input.date)) throw new Error('Invalid activity range');
+    route = `/api/activitywatch-data?${new URLSearchParams({ date: input.date, range: input.range })}`;
+  }
+  const response = await fetch(origin + route, { ...options, signal: AbortSignal.timeout(15000) });
+  if (!response.ok) throw new Error(response.status === 401 ? 'Sign in required' : 'Activity access unavailable');
+  const reader = response.body.getReader();
+  const chunks = [];
+  let length = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    length += value.length;
+    if (length > 8 * 1024 * 1024) { await reader.cancel(); throw new Error('Activity response too large'); }
+    chunks.push(Buffer.from(value));
+  }
+  assertLocalWindow(event);
+  if (cookie !== await cookies() || epoch !== activityEpoch) throw new Error('Account or permission changed; retry');
+  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+}
+
+ipcMain.handle('lifeos:activity-status', event => activityRequest(event, 'status'));
+ipcMain.handle('lifeos:activity-set', (event, allowed) => activityRequest(event, 'set', allowed));
+ipcMain.handle('lifeos:activity-data', (event, input) => activityRequest(event, 'data', input));
+
 let mainWindow;
 let serverProcess;
 let autoUpdater;
@@ -170,6 +212,9 @@ async function startProductionServer() {
       ...process.env,
       ELECTRON_RUN_AS_NODE: '1',
       LIFE_OS_LOCAL_AI: '1',
+      LIFE_OS_DESKTOP_ACTIVITY: '1',
+      LIFE_OS_ACTIVITY_SECRET: activitySecret,
+      LIFE_OS_ACTIVITY_PERMISSIONS: path.join(app.getPath('userData'), 'activitywatch-permissions.json'),
       HOSTNAME: '127.0.0.1',
       NODE_ENV: 'production',
       PORT: String(port),

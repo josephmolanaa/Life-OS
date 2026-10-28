@@ -1,12 +1,25 @@
 ﻿"use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { createClient } from '@/lib/supabase/client';
+
+declare global {
+  interface Window {
+    lifeOsActivity?: {
+      status(): Promise<{ allowed: boolean }>;
+      setAllowed(allowed: boolean): Promise<{ allowed: boolean }>;
+      data(date: string, range: string): Promise<{ items: ActivityWatchItem[]; status: string; hostname: string; timelineData: Record<string, number | string>[] }>;
+    };
+  }
+}
 import Link from 'next/link';
 import { Shell } from '@/components/finance/layout';
 import { applyActivityRules } from '@/lib/activitywatch-rules';
 import type { ActivityRule, ActivityWatchItem } from '@/lib/activitywatch-types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { copy } from '@/lib/i18n';
+import { ActivityDayBreakdown } from '@/components/activity-day-breakdown';
+import { Line, ProgressRowsSkeleton } from '@/components/skeleton';
 
 const categoryOptions = ['work', 'play', 'learn', 'admin', 'social', 'health', 'uncategorized'] as const;
 const rangeOptions = [
@@ -36,12 +49,6 @@ const categoryColors: Record<string, string> = {
   uncategorized: '#64748b' // slate
 };
 
-const fallbackItems: ActivityWatchItem[] = [
-  { app: 'Visual Studio Code', window: 'app.js - Life OS', minutes: 84, started: '09:20' },
-  { app: 'Google Chrome', window: 'ActivityWatch docs', minutes: 31, started: '10:50' },
-  { app: 'WhatsApp', window: 'Chat with team', minutes: 12, started: '11:40' },
-];
-
 function formatMinutes(minutes: number) {
   if (minutes >= 24 * 60) {
     const d = Math.floor(minutes / (24 * 60));
@@ -70,8 +77,15 @@ async function loadRules(): Promise<ActivityRule[]> {
 
 export default function ActivityPage() {
   const t = copy.en;
-  const [items, setItems] = useState<ActivityWatchItem[]>(fallbackItems);
-  const [status, setStatus] = useState('Fallback data loaded');
+  const [items, setItems] = useState<ActivityWatchItem[]>([]);
+  const [status, setStatus] = useState('Loading activity');
+  const [desktop, setDesktop] = useState(false);
+  const [allowed, setAllowed] = useState(false);
+  const [permissionBusy, setPermissionBusy] = useState(false);
+  const [permissionError, setPermissionError] = useState('');
+  const [showPermissionModal, setShowPermissionModal] = useState(false);
+  const [reload, setReload] = useState(0);
+  const generation = useRef(0);
   const [rules, setRules] = useState<ActivityRule[]>([]);
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
   const [form, setForm] = useState({ display_name: '', category: 'work' });
@@ -99,42 +113,86 @@ export default function ActivityPage() {
   };
 
   useEffect(() => {
+    let cancelled = false;
     const run = async () => {
-      try { setRules(await loadRules()); }
-      catch { setNotice('Activity rules could not be loaded. Refresh to retry.'); }
+      try {
+        const rules = await loadRules();
+        if (!cancelled) setRules(rules);
+      } catch {
+        if (!cancelled) setNotice('Activity rules could not be loaded. Refresh to retry.');
+      }
     };
     void run();
-  }, []);
+    return () => { cancelled = true; };
+  }, [reload]);
+
+  function clearActivity() {
+    setItems([]); setHostname('Unknown'); setHourlyActivity([]);
+  }
 
   useEffect(() => {
+    let account: string | undefined;
+    const { data: { subscription } } = createClient().auth.onAuthStateChange((_event, session) => {
+      const next = session?.user.id;
+      if (next === account) return;
+      account = next;
+      generation.current++;
+      clearActivity(); setRules([]); setSelectedApp(null); setNotice(''); setAllowed(false); setShowPermissionModal(false);
+      setPermissionBusy(false); setPermissionError(''); setReload(value => value + 1);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  async function changePermission(next: boolean) {
+    const bridge = window.lifeOsActivity;
+    if (!bridge) return;
+    const current = ++generation.current;
+    clearActivity(); setPermissionBusy(true); setPermissionError('');
+    try {
+      const result = await bridge.setAllowed(next);
+      if (current !== generation.current) return;
+      setAllowed(result.allowed);
+      setShowPermissionModal(false);
+      setReload(value => value + 1);
+    } catch {
+      if (current === generation.current) setPermissionError('Izin gagal disimpan. Coba lagi.');
+    } finally {
+      if (current === generation.current) setPermissionBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    const current = ++generation.current;
+    const valid = () => current === generation.current;
     const load = async () => {
-      setLoading(true);
+      setLoading(true); clearActivity();
+      const bridge = window.lifeOsActivity;
+      setDesktop(Boolean(bridge));
       try {
-        const response = await fetch(`/api/activitywatch-data?date=${selectedDate}&range=${range}`);
-        if (!response.ok) throw new Error('Proxy offline');
-        const data = await response.json();
-        if (data.items) {
-          setItems(data.items.slice(0, 100));
-          setStatus(data.status || 'Live ActivityWatch data');
-          setHostname(data.hostname || 'Unknown');
-          setHourlyActivity(data.timelineData || []);
-        } else {
-          setItems(fallbackItems);
-          setStatus('Fallback data loaded');
-          setHostname('Unknown');
-          setHourlyActivity([]);
+        if (bridge) {
+          const permission = await bridge.status();
+          if (!valid()) return;
+          setAllowed(permission.allowed);
+          if (!permission.allowed) { setStatus('Izin ActivityWatch belum diberikan'); return; }
         }
+        const data = bridge ? await bridge.data(selectedDate, range) : await (async () => {
+          const response = await fetch(`/api/activitywatch-data?date=${selectedDate}&range=${range}`, { cache: 'no-store' });
+          if (!response.ok) throw new Error('Activity unavailable');
+          return response.json();
+        })();
+        if (!valid()) return;
+        if (!Array.isArray(data.items)) throw new Error('Invalid activity response');
+        setItems(data.items.slice(0, 100)); setStatus(data.status);
+        setHostname(data.hostname || 'Unknown'); setHourlyActivity(data.timelineData || []);
       } catch {
-        setItems(fallbackItems);
-        setStatus('Fallback data loaded');
-        setHostname('Unknown');
-        setHourlyActivity([]);
+        if (valid()) { clearActivity(); setStatus('Aktivitas tidak tersedia. Periksa login dan ActivityWatch.'); }
       } finally {
-        setLoading(false);
+        if (valid()) setLoading(false);
       }
     };
     void load();
-  }, [selectedDate, range]);
+    return () => { generation.current++; };
+  }, [selectedDate, range, reload]);
 
   const mappedItems = useMemo(() => applyActivityRules(items, rules), [items, rules]);
   const totalMinutes = useMemo(() => mappedItems.reduce((sum, item) => sum + item.minutes, 0), [mappedItems]);
@@ -274,33 +332,9 @@ export default function ActivityPage() {
 
   return (
     <Shell title="ActivityWatch Module" quickFab={false}>
-      <div style={{ display: 'grid', gap: '24px' }}>
+      <div className="activityDashboard" style={{ display: 'grid', gap: '24px', minWidth: 0 }}>
         {notice && !selectedApp && <p role="alert" className="muted" style={{ margin: 0 }}>{notice}</p>}
         <style dangerouslySetInnerHTML={{ __html: `
-          @keyframes shimmer {
-            0% { opacity: 0.4; }
-            50% { opacity: 0.8; }
-            100% { opacity: 0.4; }
-          }
-          .skeleton {
-            animation: shimmer 1.5s infinite ease-in-out;
-            background: var(--border2, #262522);
-            border-radius: 4px;
-          }
-          .category-select {
-            cursor: pointer;
-            font-size: 12px;
-            padding: 4px 8px;
-            border-radius: 6px;
-            border: 1px solid var(--border, #333);
-            background: var(--card-bg, #1a1917);
-            color: var(--text, #eae9e5);
-            outline: none;
-            transition: all 0.15s ease;
-          }
-          .category-select:hover {
-            border-color: var(--accent);
-          }
           .feed-item {
             padding: 10px 14px;
             border-radius: 8px;
@@ -324,9 +358,19 @@ export default function ActivityPage() {
           }
           .dashboard-grid {
             display: grid;
-            grid-template-columns: 2fr 1fr;
+            grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
             gap: 24px;
           }
+          .activityDashboard .dashboard-grid * { min-width: 0; }
+          .activityDashboard .deviceCard { flex-wrap: wrap; }
+          .activityDashboard .deviceCard > div { min-width: 0; flex: 1 1 180px; }
+          .activityDashboard .deviceCard > div > div:first-child { flex-shrink: 0; }
+          .activityDashboard .deviceCard > div > div:last-child { min-width: 0; }
+          .activityDashboard .deviceCard h3 { overflow-wrap: anywhere; }
+          .activityDashboard .deviceCard button { flex-shrink: 0; margin-left: auto; }
+          .activityDashboard .usageLabel { gap: 12px; }
+          .activityDashboard .usageLabel > span:first-child { flex: 1; }
+          .activityDashboard .usageLabel > span:last-child { flex-shrink: 0; white-space: nowrap; }
           @media (max-width: 968px) {
             .dashboard-grid {
               grid-template-columns: 1fr;
@@ -377,12 +421,24 @@ export default function ActivityPage() {
               <h3 style={{ margin: '4px 0 0', fontSize: '20px', fontWeight: 700 }}>{formatMinutes(totalMinutes)}</h3>
             </div>
           </div>
-          <div className="card" style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <div style={{ fontSize: '28px', background: 'rgba(16, 185, 129, 0.1)', padding: '12px', borderRadius: '12px' }}>&#x1F4BB;</div>
-            <div>
-              <p className="muted" style={{ margin: 0, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Device Host</p>
-              <h3 style={{ margin: '4px 0 0', fontSize: '20px', fontWeight: 700 }}>{hostname}</h3>
+          <div className="card deviceCard" style={{ padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <div style={{ fontSize: '28px', background: 'rgba(16, 185, 129, 0.1)', padding: '12px', borderRadius: '12px' }}>&#x1F4BB;</div>
+              <div>
+                <p className="muted" style={{ margin: 0, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Device Host</p>
+                <h3 style={{ margin: '4px 0 0', fontSize: '20px', fontWeight: 700 }}>{hostname}</h3>
+              </div>
             </div>
+            {desktop && (
+              <button
+                type="button"
+                className="btn ghost"
+                style={{ fontSize: '12px', padding: '6px 12px', whiteSpace: 'nowrap' }}
+                onClick={() => setShowPermissionModal(true)}
+              >
+                {allowed ? 'Izin Aktif' : 'Atur Izin'}
+              </button>
+            )}
           </div>
           <div className="card" style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '16px' }}>
             <div style={{ fontSize: '28px', background: 'rgba(245, 158, 11, 0.1)', padding: '12px', borderRadius: '12px' }}>&#x1F3F7;&#xFE0F;</div>
@@ -451,6 +507,62 @@ export default function ActivityPage() {
           </div>
         )}
 
+        {/* Modal Izin ActivityWatch Overlay */}
+        {desktop && showPermissionModal && (
+          <div style={{
+            position: 'fixed',
+            top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '20px'
+          }} onClick={() => !permissionBusy && setShowPermissionModal(false)}>
+            <div className="card" style={{
+              width: '100%',
+              maxWidth: '460px',
+              padding: '24px',
+              display: 'grid',
+              gap: '16px',
+              border: '1px solid var(--border)',
+              background: 'var(--bg, #1a1917)',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+              borderRadius: '12px'
+            }} onClick={(e) => e.stopPropagation()}>
+              <h2 style={{ fontSize: '18px', fontWeight: 700, margin: 0 }}>Izin ActivityWatch PC</h2>
+              <p style={{ margin: 0, fontSize: '14px', lineHeight: 1.5 }}>
+                {allowed
+                  ? 'Akun ini sedang memiliki izin untuk membaca aktivitas perangkat ini.'
+                  : 'Izinkan akun ini membaca riwayat aktivitas PC ini, termasuk nama aplikasi dan judul jendela?'}
+              </p>
+              <p className="muted" style={{ margin: 0, fontSize: '12px', lineHeight: 1.4 }}>
+                Aktivitas tetap tersimpan lokal di komputer ini dan tidak diunggah ke cloud. Izin berlaku khusus akun ini pada profil aplikasi ini.
+              </p>
+              {permissionError && <p role="alert" style={{ margin: 0, fontSize: '13px', color: '#ef4444' }}>{permissionError}</p>}
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '8px' }}>
+                <button
+                  className="btn ghost"
+                  type="button"
+                  disabled={permissionBusy}
+                  onClick={() => setShowPermissionModal(false)}
+                >
+                  Tutup
+                </button>
+                <button
+                  className="btn"
+                  type="button"
+                  disabled={permissionBusy}
+                  onClick={() => void changePermission(!allowed)}
+                >
+                  {permissionBusy ? 'Menyimpan…' : allowed ? 'Cabut Izin' : 'Izinkan Akses'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Dashboard Content Grid */}
         <div className="dashboard-grid">
           {/* Main Visuals Column (Left) */}
@@ -497,11 +609,12 @@ export default function ActivityPage() {
               </div>
               <div style={{ display: 'grid', gap: '14px' }}>
                 {loading ? (
-                  [1, 2, 3].map(n => <div key={n} className="skeleton" style={{ height: '36px' }} />)
+                  <ProgressRowsSkeleton />
+
                 ) : (
                   appUsageSummary.map(app => (
                     <div key={app.name} style={{ display: 'grid', gap: '6px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', alignItems: 'center' }}>
+                      <div className="usageLabel" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', alignItems: 'center' }}>
                         <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '75%' }}>{app.name}</span>
                         <span className="muted" style={{ fontSize: '12px' }}>{formatMinutes(app.minutes)} ({app.totalPct}%)</span>
                       </div>
@@ -523,11 +636,12 @@ export default function ActivityPage() {
               </div>
               <div style={{ display: 'grid', gap: '14px' }}>
                 {loading ? (
-                  [1, 2, 3].map(n => <div key={n} className="skeleton" style={{ height: '36px' }} />)
+                  <ProgressRowsSkeleton />
+
                 ) : (
                   windowUsageSummary.map(win => (
                     <div key={win.name} style={{ display: 'grid', gap: '6px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', alignItems: 'center' }}>
+                      <div className="usageLabel" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', alignItems: 'center' }}>
                         <span style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '75%', fontSize: '12px' }} className="muted">{win.name}</span>
                         <span className="muted" style={{ fontSize: '11px' }}>{formatMinutes(win.minutes)} ({win.totalPct}%)</span>
                       </div>
@@ -546,13 +660,14 @@ export default function ActivityPage() {
             {/* Category Breakdown */}
             <section className="card" style={{ padding: '20px' }}>
               <h2 style={{ fontSize: '16px', fontWeight: 600, margin: '0 0 16px 0' }}>Category Breakdown</h2>
+              {range === '1d' && <ActivityDayBreakdown categories={categorySummary} colors={categoryColors} />}
               <div style={{ display: 'grid', gap: '14px' }}>
                 {categorySummary.map(([category, minutes]) => {
                   const pct = totalMinutes > 0 ? Math.round((minutes / totalMinutes) * 100) : 0;
                   const color = categoryColors[category] || '#64748b';
                   return (
                     <div key={category} style={{ display: 'grid', gap: '6px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', alignItems: 'center' }}>
+                      <div className="usageLabel" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', alignItems: 'center' }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
                           <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: color }} />
                           <span style={{ textTransform: 'capitalize' }}>{categoryEmojis[category] || category}</span>
@@ -602,12 +717,12 @@ export default function ActivityPage() {
                 value={filterCategory}
                 onChange={(e) => setFilterCategory(e.target.value)}
                 className="category-select"
-                style={{ height: '40px', padding: '0 12px' }}
+                aria-label="Filter kategori aktivitas"
               >
                 <option value="all">Semua Kategori</option>
                 {categoryOptions.map(cat => (
                   <option key={cat} value={cat}>
-                    {categoryEmojis[cat] || cat}
+                    {cat.charAt(0).toUpperCase() + cat.slice(1)}
                   </option>
                 ))}
               </select>
@@ -615,10 +730,11 @@ export default function ActivityPage() {
           </div>
 
           {loading ? (
-            <div style={{ display: 'grid', gap: '12px' }}>
-              {[1, 2, 3, 4, 5].map(n => (
-                <div key={n} className="skeleton" style={{ height: '50px' }} />
-              ))}
+            <div className="skeletonReveal" style={{ overflowX: 'auto' }} aria-hidden="true">
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(140px, 1.2fr) minmax(160px, 2fr) 80px 100px 160px', gap: 10, padding: 10, borderBottom: '1px solid var(--border2)', minWidth: 680 }}>{[60, 50, 40, 50, 60].map((width, col) => <Line key={col} width={`${width}%`} height={14} style={col > 2 ? { justifySelf: 'end' } : undefined} />)}</div>
+              {[0, 1, 2, 3, 4].map(row => <div key={row} style={{ display: 'grid', gridTemplateColumns: 'minmax(140px, 1.2fr) minmax(160px, 2fr) 80px 100px 160px', gap: 10, alignItems: 'center', padding: 10, minHeight: 50, borderBottom: '1px solid var(--border2)', minWidth: 680 }}>
+                <div className="loadingStack"><Line width="75%" height={16} /><Line width="45%" height={12} /></div><Line width={`${[80, 65, 72, 58, 70][row]}%`} height={14} /><Line width={44} height={14} /><Line width={52} height={14} style={{ justifySelf: 'end' }} /><Line width={92} height={24} style={{ justifySelf: 'end', borderRadius: 999 }} />
+              </div>)}
             </div>
           ) : filteredItems.length === 0 ? (
             <div style={{ padding: '40px 0', textAlign: 'center' }} className="muted">
@@ -668,10 +784,11 @@ export default function ActivityPage() {
                               quickAssignCategory(item.app, e.target.value);
                             }}
                             className="category-select"
+                            aria-label={`Kategori ${item.display_name}`}
                           >
                             {categoryOptions.map((cat) => (
                               <option key={cat} value={cat}>
-                                {categoryEmojis[cat] || cat}
+                                {cat.charAt(0).toUpperCase() + cat.slice(1)}
                               </option>
                             ))}
                           </select>

@@ -13,12 +13,12 @@ declare global {
 }
 
 export function AppInfoSettings({ lang }: { lang: 'en' | 'id' }) {
-  const [version, setVersion] = useState('1.0.0');
+  const [version, setVersion] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
   const [updateStatus, setUpdateStatus] = useState('');
 
   useEffect(() => {
-    window.lifeOsUpdater?.getVersion().then(setVersion).catch(() => {});
+    window.lifeOsUpdater?.getVersion().then(setVersion).catch(() => setVersion(''));
   }, []);
 
   async function checkUpdate() {
@@ -52,25 +52,12 @@ export function AppInfoSettings({ lang }: { lang: 'en' | 'id' }) {
     <div className="appInfoRow">
       <div>
         <strong>{id ? 'Versi' : 'Version'}</strong>
-        <p className="muted noMargin" style={{ fontSize: '12px' }}>Life OS v{version}</p>
+        <p className="muted noMargin" style={{ fontSize: '12px' }}>{version ? `Life OS v${version}` : (id ? 'Versi desktop belum tersedia' : 'Desktop version unavailable')}</p>
       </div>
       <button type="button" className="btn ghost" disabled={checking} onClick={() => void checkUpdate()}>{checking ? (id ? 'Memeriksa…' : 'Checking…') : (id ? 'Cek Update' : 'Check Update')}</button>
     </div>
 
     {updateStatus && <p className="muted" style={{ fontSize: '12px', padding: '8px 10px', background: 'var(--surface2)', borderRadius: '8px', margin: '6px 0 0' }}>{updateStatus}</p>}
 
-    <div className="appInfoRow">
-      <div>
-        <strong>{id ? 'Tentang' : 'About'}</strong>
-        <p className="muted noMargin" style={{ fontSize: '12px' }}>{id ? 'Life OS - Personal Management System' : 'Life OS - Personal Management System'}</p>
-      </div>
-    </div>
-
-    <div className="appInfoRow">
-      <div>
-        <strong>{id ? 'Build Date' : 'Build Date'}</strong>
-        <p className="muted noMargin" style={{ fontSize: '12px' }}>2026-10-04</p>
-      </div>
-    </div>
   </section>;
 }
