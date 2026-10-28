@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, Menu, safeStorage, Tray } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, Notification, safeStorage, Tray } = require('electron');
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const http = require('node:http');
@@ -227,9 +227,33 @@ function configureAutoUpdater() {
   if (autoUpdater) return autoUpdater;
 
   ({ autoUpdater } = require('electron-updater'));
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.allowPrerelease = false;
   autoUpdater.on('error', (error) => console.error('Auto-update failed:', error));
-  autoUpdater.on('update-available', () => console.log('Update available'));
-  autoUpdater.on('update-downloaded', () => autoUpdater.quitAndInstall());
+  autoUpdater.on('update-available', (info) => {
+    console.log('Update available:', info.version);
+    if (Notification.isSupported()) {
+      new Notification({
+        title: 'Life OS Update',
+        body: `Versi baru v${info.version} tersedia dan sedang diunduh di latar belakang.`,
+      }).show();
+    }
+  });
+  autoUpdater.on('update-downloaded', (info) => {
+    console.log('Update downloaded:', info.version);
+    if (Notification.isSupported()) {
+      const notification = new Notification({
+        title: 'Life OS Siap Diperbarui',
+        body: `Versi v${info.version} selesai diunduh. Klik di sini untuk me-restart dan memasang pembaruan sekarang.`,
+      });
+      notification.on('click', () => {
+        autoUpdater.quitAndInstall(false, true);
+      });
+      notification.show();
+    }
+    // Jika tidak diklik segera, pembaruan tetap terpasang otomatis saat aplikasi ditutup
+  });
   autoUpdater.checkForUpdatesAndNotify().catch((error) => console.error('Update check failed:', error));
   return autoUpdater;
 }

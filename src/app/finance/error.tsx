@@ -1,5 +1,13 @@
-'use client';
+"use client";
 
-export default function Error({ error, reset }: { error: Error; reset: () => void }) {
-  return <main className="shell"><section className="card form"><span className="pill">Error</span><b>Finance page failed to load</b><p className="muted noMargin">{error.message}</p><button className="btn" type="button" onClick={reset}>Try again</button></section></main>;
+import Link from 'next/link';
+
+export default function FinanceError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
+  return <main className="shell"><section className="card form" role="alert">
+    <h1>Data keuangan belum dapat dimuat</h1>
+    <p>Periksa koneksi lalu coba lagi. Saldo tidak ditampilkan agar data yang gagal dimuat tidak terbaca sebagai nol.</p>
+    <p lang="en">Unable to load finance data. Check your connection and retry. Balances are hidden until data loads successfully.</p>
+    <button className="btn" type="button" onClick={reset}>Coba lagi / Retry</button>
+    <Link className="btn ghost" href="/">Beranda / Home</Link>
+  </section></main>;
 }

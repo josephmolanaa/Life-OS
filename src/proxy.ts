@@ -23,6 +23,17 @@ export async function proxy(request: NextRequest) {
 
   const { data } = await supabase.auth.getUser();
 
+  // Handle the public entry point before React renders. A server-component
+  // redirect is streamed as a one-second meta refresh in Next, which can look
+  // like an endless reload when the session is stale. Redirect at the proxy
+  // boundary instead.
+  if (request.nextUrl.pathname === '/' && !data.user) {
+    const loginUrl = request.nextUrl.clone();
+    loginUrl.pathname = '/login';
+    loginUrl.search = '';
+    return NextResponse.redirect(loginUrl);
+  }
+
   if (data.user?.user_metadata?.avatar_url?.startsWith('data:')) {
     await supabase.auth.updateUser({ data: { avatar_url: undefined } }).catch(() => {});
   }

@@ -38,10 +38,11 @@ function WalletsLoading() {
 
 function TransactionsLoading() {
   return <>
+    <div className="editPageNav transactionPageNav loadingActionRow"><Line width={142} height={40} style={{ borderRadius: 9 }} /><Line width={158} height={40} style={{ borderRadius: 9 }} /></div>
     <div className="daySwitcher"><Line width={44} height={44} style={{ borderRadius: 999 }} /><div className="dayPicker" style={{ minWidth: 0 }}><Field width="min(150px, 38vw)" /><Line width="min(190px, 48vw)" height={39} /></div><Line width={44} height={44} style={{ borderRadius: 999 }} /></div>
     <div className="daySummary card">{Array.from({ length: 3 }, (_, index) => <div key={index}><Line width={70} height={16} /><Line width={100} height={20} /></div>)}</div>
-    <div className="grid grid2 desktopTransactionForms">{[6, 5].map((count, index) => <div className="card form" key={index}><Line width={160} height={21} /><FormFields count={count} /><Line height={39} /></div>)}</div>
-    <Rows />
+    <div className="reportTabs">{[0, 1, 2].map(index => <div className="reportTab" key={index}><Line width="64%" height={21} /></div>)}</div>
+    <div className="list transactionList sectionGap">{Array.from({ length: 4 }, (_, index) => <div className="item transactionItem" key={index}><span className="transactionInfo"><Line width="62%" height={20} /><Line width="74%" height={16} style={{ marginTop: 6 }} /></span><Line width={110} height={22} /><Line width={22} height={22} /></div>)}</div>
   </>;
 }
 
@@ -88,13 +89,17 @@ function FinanceSettingsLoading() {
 }
 
 export function FinanceModuleLoading({ variant }: { variant: FinanceLoadingVariant }) {
-  switch (variant) {
-    case 'wallets': return <WalletsLoading />;
-    case 'transactions': return <TransactionsLoading />;
-    case 'budgets': return <BudgetsLoading />;
-    case 'net-worth': return <NetWorthLoading />;
-    case 'btc': return <BtcLoading />;
-    case 'activity': return <ActivityLoading />;
-    case 'finance-settings': return <FinanceSettingsLoading />;
-  }
+  const content = (() => {
+    switch (variant) {
+      case 'wallets': return <WalletsLoading />;
+      case 'transactions': return <TransactionsLoading />;
+      case 'budgets': return <BudgetsLoading />;
+      case 'net-worth': return <NetWorthLoading />;
+      case 'btc': return <BtcLoading />;
+      case 'activity': return <ActivityLoading />;
+      case 'finance-settings': return <FinanceSettingsLoading />;
+    }
+  })();
+  if (variant === 'transactions') return content;
+  return <><div className="loadingBackLink" aria-hidden="true"><Line width={142} height={40} style={{ borderRadius: 9 }} /></div>{content}</>;
 }

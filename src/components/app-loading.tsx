@@ -7,7 +7,7 @@ export function AppLoading() {
   return <PageLoading title="Loading..." variant="home" />;
 }
 
-type LoadingVariant = 'home' | 'finance' | 'reports' | 'report-realtime' | 'report-custom' | 'report-detail' | 'loans' | 'account' | 'dashboard' | 'list' | 'form' | 'settings' | 'habits' | 'diary' | 'career' | 'physique' | 'social' | 'discipline' | 'schedule' | 'rps' | 'login' | FinanceLoadingVariant;
+type LoadingVariant = 'home' | 'finance' | 'reports' | 'report-realtime' | 'report-custom' | 'report-detail' | 'loans' | 'account' | 'dashboard' | 'study' | 'list' | 'form' | 'transaction-new' | 'transaction-edit' | 'wallet-edit' | 'settings' | 'habits' | 'diary' | 'career' | 'physique' | 'social' | 'discipline' | 'schedule' | 'rps' | 'login' | FinanceLoadingVariant;
 
 function Line({ width = '100%', height = 16, style }: { width?: CSSProperties['width']; height?: number; style?: CSSProperties }) {
   return <span className="loadingLine" style={{ width, maxWidth: '100%', height, flexShrink: 0, ...style }} />;
@@ -34,27 +34,37 @@ function Tabs({ count = 3, detail = false }: { count?: number; detail?: boolean 
 
 function DashboardLoadingContent() {
   return <div className="lifeDashboard dashboardLoadingSkeleton" aria-hidden="true">
-    <div className="dashboardPillars">{Array.from({ length: 5 }, (_, index) => <div className="card dashboard-card skeletonCard" key={index} />)}</div>
-    <section className="card consistencySkeleton"><div className="loadingLine loadingGroupTitle" /><div className="consistencyScroll"><div className="consistencySkeletonGrid">{Array.from({ length: 371 }, (_, index) => <span key={index} />)}</div></div></section>
     <div className="dashboardSplit"><div className="card skeletonBlock" /><div className="card skeletonBlock" /></div>
+    <div className="dashboardPillars">{Array.from({ length: 5 }, (_, index) => <div className="card dashboard-card skeletonCard" key={index} />)}</div>
+    <section className="card consistencyCard consistencyLoadingCard"><div className="consistencyHeader"><div><Line width={190} height={22} /><Line width={250} height={16} style={{ marginTop: 8 }} /></div><Line width={58} height={24} /></div><div className="consistencyScroll"><div className="consistencyYearGrid"><div className="consistencyMonths">{Array.from({ length: 53 }, (_, index) => <Line key={index} height={12} />)}</div><div className="consistencyWeekGrid">{Array.from({ length: 53 }, (_, week) => <div className="consistencyWeek" key={week}>{Array.from({ length: 7 }, (_, day) => <Line key={day} height={12} style={{ borderRadius: 2 }} />)}</div>)}</div></div></div></section>
     <div className="moduleSkeleton"><div className="card skeletonBlock" /><div className="card skeletonBlock" /></div>
+  </div>;
+}
+
+function StudyLoadingContent() {
+  return <div className="routeLoading studyHubLoadingSkeleton" aria-hidden="true">
+    <div className="studyHubCards">{[0, 1].map(index => <div className="card" style={{ padding: 24 }} key={index}><div className="row" style={{ alignItems: 'center' }}><Line width={22} height={22} /><Line width="55%" height={22} /></div><Line width="82%" height={18} style={{ marginTop: 12 }} /></div>)}</div>
   </div>;
 }
 
 function FinanceLoadingContent() {
   return <div className="financeLoadingSkeleton" aria-hidden="true">
-    <Tabs count={6} />
-    <section className="grid grid2 metricGrid">{Array.from({ length: 4 }, (_, index) => <div className="card summary" key={index}>
-      <Line width="65%" height={17} /><Line width="75%" height={28} style={{ margin: '12px 0 8px' }} /><Line height={20} />
-    </div>)}</section>
-    <section className="card walletPanel"><div className="row"><div style={{ flex: 1 }}><Heading subtitle /></div><Line width={80} height={32} /></div><div className="spaced"><Rows /></div></section>
+    <div className="financeToolbar"><Line width={180} height={40} /><Line width={270} height={40} /><Line width={90} height={40} /></div>
+    <div className="financeModuleNav financeModuleNavLoading">{[72, 96, 78, 82, 76, 88].map((width, index) => <span className="financeNavLoadingItem" style={{ width }} key={index} />)}</div>
+    <div className="financeWidgetGrid">
+      <section className="financeWidget financeHero"><Heading /><Line width="45%" height={35} style={{ margin: '24px 0 20px' }} /><div className="financeHeroMetrics">{[0, 1, 2].map(index => <Line key={index} width={100} height={42} />)}</div><Line height={220} style={{ marginTop: 22, borderRadius: 12 }} /></section>
+      <section className="financeWidget financeRecent"><Heading /><Rows count={5} /></section>
+      {[0, 1, 2].map(index => <section className="financeWidget" key={index}><Heading /><Line height={200} style={{ marginTop: 24, borderRadius: 12 }} /></section>)}
+    </div>
   </div>;
 }
 
 function ReportLoadingContent({ variant }: { variant: LoadingVariant }) {
   const lines = (count: number) => Array.from({ length: count }, (_, index) => <div className="reportLine" key={index}><Line width="65%" height={28} /><Line width={110} height={27} /></div>);
   return <div className="reportsLoadingSkeleton" aria-hidden="true">
-    <Tabs detail={variant === 'report-detail'} />
+    <div className="loadingBackLink"><Line width={142} height={18} /></div>
+    {/* Keep the loading switcher aligned with the rendered report page. */}
+    <Tabs count={variant === 'report-detail' ? 3 : 2} detail={variant === 'report-detail'} />
     {variant === 'reports' ? <div className="reportMonthList">{[0, 1].map(index => <div className="reportMonthBlock" key={index}><div className="reportMonthTitle"><Line width="40%" height={24} style={{ margin: '0 auto' }} /></div>{lines(5)}</div>)}</div>
       : variant === 'report-detail' ? <Suspense fallback={<ReportDetailLoadingFallback />}><ReportDetailLoading /></Suspense>
       : <><div className="card reportPanel"><div className="reportMonthTitle"><Line width="25%" height={24} style={{ margin: '0 auto' }} /></div>{variant === 'report-custom' ? <div className="empty"><Line height={21} /></div> : lines(4)}<div className="sectionGap"><Line width="50%" height={21} /></div></div>{variant === 'report-realtime' && <div className="card reportPanel"><Heading /><Rows /></div>}</>}
@@ -121,12 +131,16 @@ function PillarLoadingContent({ variant, inline = false }: { variant: 'career' |
 
 function StudyScheduleLoadingContent() {
   return <div className="routeLoading scheduleLoadingSkeleton" style={{ minWidth: 0 }} aria-hidden="true"><div className="row" style={{ alignItems: 'center' }}><Line width={180} height={30} /><Line width={130} height={32} /></div>
-    <div className="card" style={{ padding: 0, overflow: 'hidden', maxWidth: '100%' }}><div style={{ overflowX: 'auto', maxWidth: '100%' }}><table className="scheduleLoadingTable" style={{ minWidth: 980 }}><thead><tr>{Array.from({ length: 7 }, (_, index) => <th key={index}><Line height={21} /></th>)}</tr></thead><tbody>{Array.from({ length: 6 }, (_, row) => <tr key={row}>{Array.from({ length: 7 }, (_, col) => <td key={col}><Line height={col === 2 ? 30 : 21} /></td>)}</tr>)}</tbody></table></div></div>
+    <div className="studyScheduleCards">{Array.from({ length: 6 }, (_, index) => <div className="card" style={{ padding: 16 }} key={index}><Line width={100} height={18} /><Line width="80%" height={24} style={{ margin: '8px 0 16px' }} /><div className="loadingStack">{Array.from({ length: 3 }, (_, row) => <div className="loadingStack" key={row}><Line width={80} height={18} /><Line width="80%" height={21} /></div>)}</div></div>)}</div>
+    <div className="card studyScheduleTable" style={{ padding: 0, overflow: 'hidden', maxWidth: '100%' }}><div style={{ overflowX: 'auto', maxWidth: '100%' }}><table className="scheduleLoadingTable" style={{ minWidth: 980 }}><thead><tr>{Array.from({ length: 7 }, (_, index) => <th key={index}><Line height={21} /></th>)}</tr></thead><tbody>{Array.from({ length: 6 }, (_, row) => <tr key={row}>{Array.from({ length: 7 }, (_, col) => <td key={col}><Line height={col === 2 ? 30 : 21} /></td>)}</tr>)}</tbody></table></div></div>
   </div>;
 }
 
 function RpsLoadingContent() {
-  return <div className="routeLoading rpsLoadingSkeleton" style={{ minWidth: 0 }} aria-hidden="true">{[0, 1, 2].map(index => <div className="card" style={{ padding: 'clamp(16px, 4vw, 24px)', minWidth: 0 }} key={index}><div className="row" style={{ alignItems: 'center', marginBottom: 16 }}><div className="loadingStack" style={{ flex: 1, minWidth: 0 }}><Line width={75} height={32} /><Line width="60%" height={27} /></div><Line width={45} height={20} /></div><div className="list">{[0, 1, 2, 3].map(topic => <div className="item" style={{ justifyContent: 'flex-start', gap: 10, padding: '10px 0', minWidth: 0 }} key={topic}><Line width={16} height={16} /><Line width="60%" height={21} /></div>)}</div></div>)}</div>;
+  return <div className="rpsLoadingSkeleton" style={{ minWidth: 0 }} aria-hidden="true">
+    <div className="card" style={{ padding: 20 }}><Line height={21} style={{ margin: '14px 0' }} /><Line width={180} height={21} /></div>
+    <div className="studyCourseList">{Array.from({ length: 6 }, (_, index) => <div className="card" style={{ padding: 20 }} key={index}><Line width={100} height={18} /><Line width="70%" height={26} style={{ margin: '14px 0' }} /><Line width={170} height={21} /></div>)}</div>
+  </div>;
 }
 
 function LoginLoadingContent() {
@@ -160,10 +174,27 @@ function ListLoadingContent({ rows }: { rows: number }) {
 }
 
 function FormLoadingContent() {
-  return <div className="card formLoadingSkeleton" aria-hidden="true">
-    <div className="loadingLine formLoadingTitle" />
-    {Array.from({ length: 4 }, (_, index) => <div className="formLoadingField" key={index}><span className="loadingLine" /><span className="loadingLine" /></div>)}
-    <div className="loadingLine formLoadingButton" />
+  return <div className="formRouteLoading" aria-hidden="true">
+    <div className="loadingBackLink"><Line width={142} height={40} style={{ borderRadius: 9 }} /></div>
+    <div className="card formLoadingSkeleton">
+      <div className="loadingLine formLoadingTitle" />
+      {Array.from({ length: 4 }, (_, index) => <div className="formLoadingField" key={index}><span className="loadingLine" /><span className="loadingLine" /></div>)}
+      <div className="loadingLine formLoadingButton" />
+    </div>
+  </div>;
+}
+
+function FinanceFormLoadingContent({ kind }: { kind: 'transaction-new' | 'transaction-edit' | 'wallet-edit' }) {
+  const isWallet = kind === 'wallet-edit';
+  const isEdit = kind !== 'transaction-new';
+  const field = (key: number, height = 43) => <div className="formLoadingField" key={key}><span className="loadingLine" /><span className="loadingLine" style={{ height, borderRadius: 9 }} /></div>;
+  return <div className="financeFormLoading" aria-hidden="true">
+    <div className="editPageNav loadingActionRow"><Line width={isEdit ? 142 : 90} height={40} style={{ borderRadius: 9 }} />{isEdit && <Line width={82} height={40} style={{ borderRadius: 9 }} />}</div>
+    {!isWallet && !isEdit && <Tabs count={3} />}
+    <div className="card form financeFormLoadingCard"><Line width={isWallet ? 120 : 150} height={22} />
+      {(isWallet ? [0, 1, 2, 3] : [0, 1, 2, 3, 4]).map(key => field(key, key === 4 ? 78 : 43))}
+      <Line width={130} height={40} style={{ borderRadius: 9 }} />
+    </div>
   </div>;
 }
 
@@ -183,6 +214,7 @@ function LoadingContent({ variant, blocks }: { variant: LoadingVariant; blocks: 
   switch (variant) {
     case 'login': return <LoginLoadingContent />;
     case 'home': return <DashboardLoadingContent />;
+    case 'study': return <StudyLoadingContent />;
     case 'finance': return <FinanceLoadingContent />;
     case 'reports': case 'report-realtime': case 'report-custom': case 'report-detail': return <ReportLoadingContent variant={variant} />;
     case 'loans': return <LoansLoadingContent />;
@@ -196,6 +228,7 @@ function LoadingContent({ variant, blocks }: { variant: LoadingVariant; blocks: 
     case 'wallets': case 'transactions': case 'budgets': case 'net-worth': case 'btc': case 'activity': case 'finance-settings': return <FinanceModuleLoading variant={variant} />;
     case 'list': return <ListLoadingContent rows={blocks} />;
     case 'form': return <FormLoadingContent />;
+    case 'transaction-new': case 'transaction-edit': case 'wallet-edit': return <FinanceFormLoadingContent kind={variant} />;
     default: return <TrackerLoadingContent />;
   }
 }

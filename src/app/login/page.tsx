@@ -18,6 +18,7 @@ export default function LoginPage() {
     setError('');
     setMessage('');
 
+    try {
     if (isRegister) {
       const { error } = await supabase.auth.signUp({
         email,
@@ -38,12 +39,15 @@ export default function LoginPage() {
       if (!response.ok) setError(result.error ?? 'Login gagal.');
       else window.location.replace('/finance');
     }
+    } catch { setError('Koneksi gagal. Coba lagi; email dan password tetap tersedia.'); }
+    finally { setLoading(false); }
   };
 
   const handleGoogle = async () => {
     setLoading(true);
     setError('');
     setMessage('');
+    try {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: `${window.location.origin}/api/auth/callback` },
@@ -52,21 +56,25 @@ export default function LoginPage() {
       setLoading(false);
       setError(error.message);
     }
+    } catch { setError('Koneksi gagal. Coba lagi.'); }
+    finally { setLoading(false); }
   };
 
   return (
     <main style={{ minHeight: '100vh', background: 'var(--bg)', display: 'grid', placeItems: 'center', padding: '24px' }}>
       <section className="card" style={{ width: '100%', maxWidth: '440px', padding: '28px' }}>
-        <p className="muted" style={{ letterSpacing: '.32em', fontSize: '11px', textTransform: 'uppercase', margin: 0 }}>Scaramouche</p>
+        <p className="muted" style={{ letterSpacing: '.32em', fontSize: '11px', textTransform: 'uppercase', margin: 0 }}>Life OS</p>
         <h1 style={{ margin: '10px 0 8px', fontSize: '36px', lineHeight: 1, color: 'var(--text)' }}>
           {isRegister ? 'Register' : 'Login'}
         </h1>
-        <p className="muted" style={{ marginTop: 0 }}>Satu akun Supabase. Data sync Android PWA, web, desktop.</p>
+        <p className="muted" style={{ marginTop: 0 }}>Kelola aktivitas, kebiasaan, dan keuanganmu. Koneksi internet diperlukan untuk masuk.</p>
 
         <div className="authTabs" style={{ display: 'flex', gap: '8px', marginBottom: '16px', borderBottom: '1px solid var(--border2)' }}>
           <button
             type="button"
-            onClick={() => setIsRegister(false)}
+            disabled={loading}
+            aria-pressed={!isRegister}
+            onClick={() => { setIsRegister(false); setError(''); setMessage(''); }}
             style={{
               background: 'none',
               border: 'none',
@@ -81,7 +89,9 @@ export default function LoginPage() {
           </button>
           <button
             type="button"
-            onClick={() => setIsRegister(true)}
+            disabled={loading}
+            aria-pressed={isRegister}
+            onClick={() => { setIsRegister(true); setError(''); setMessage(''); }}
             style={{
               background: 'none',
               border: 'none',
@@ -96,20 +106,24 @@ export default function LoginPage() {
           </button>
         </div>
 
-        {error && <div style={{ color: 'var(--red)', background: 'rgba(163,45,45,0.1)', border: '1px solid var(--red)', padding: '10px', borderRadius: '8px', marginBottom: '14px', fontSize: '13px' }}>{error}</div>}
-        {message && <div style={{ color: 'var(--green)', background: 'rgba(59,109,17,0.1)', border: '1px solid var(--green)', padding: '10px', borderRadius: '8px', marginBottom: '14px', fontSize: '13px' }}>{message}</div>}
+        {error && <div role="alert" style={{ color: 'var(--red)', background: 'rgba(163,45,45,0.1)', border: '1px solid var(--red)', padding: '10px', borderRadius: '8px', marginBottom: '14px', fontSize: '13px' }}>{error}</div>}
+        {message && <div role="status" style={{ color: 'var(--green)', background: 'rgba(59,109,17,0.1)', border: '1px solid var(--green)', padding: '10px', borderRadius: '8px', marginBottom: '14px', fontSize: '13px' }}>{message}</div>}
 
         <form onSubmit={handleEmailPassword} className="form">
+          <label htmlFor="login-email">Email</label>
           <input
             className="input"
+            id="login-email" name="email" autoComplete="username" disabled={loading}
             type="email"
             placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
           />
+          <label htmlFor="login-password">Password</label>
           <input
             className="input"
+            id="login-password" name="password" autoComplete={isRegister ? 'new-password' : 'current-password'} disabled={loading}
             type="password"
             placeholder="Password"
             value={password}

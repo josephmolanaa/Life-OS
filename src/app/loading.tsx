@@ -28,6 +28,7 @@ export default function Loading() {
   if (pathname === '/discipline') return <PageLoading title="Discipline" variant="discipline" />;
   if (pathname === '/study/jadwal') return <PageLoading title="Class Schedule" variant="schedule" />;
   if (pathname === '/study/rps') return <PageLoading title="RPS (Rencana Pembelajaran Semester)" variant="rps" />;
+  if (pathname === '/study') return <PageLoading title="Study Hub" variant="study" />;
   if (pathname === '/settings') return <PageLoading title="Settings" variant="settings" />;
   if (pathname === '/' || pathname === '/dashboard') return <PageLoading title="Dashboard" variant="home" />;
   return <div role="status" aria-busy="true" className="authLoading">Loading…</div>;

@@ -40,6 +40,12 @@ function required(formData: FormData, key: string, label: string) {
   return text;
 }
 
+function currencyValue(formData: FormData) {
+  const currency = (value(formData, 'currency') || 'IDR').toUpperCase();
+  if (!/^[A-Z]{3,10}$/.test(currency)) throw new Error('Currency must be a 3–10 letter code, such as IDR, USD, or BTC');
+  return currency;
+}
+
 function requiredAmount(formData: FormData, key: string, label: string) {
   const number = amount(formData, key);
   if (number <= 0) throw new Error(`${label} must be greater than 0`);
@@ -69,10 +75,20 @@ function monthValue(formData: FormData, key: string) {
   throw new Error('month is invalid');
 }
 
-function done(path = '/finance') { revalidatePath('/finance', 'layout'); redirect(path); }
+function isBtcSchemaError(error: { code?: string; message?: string } | null) {
+  return Boolean(error && ['42703', 'PGRST204'].includes(error.code ?? '') && /buy_date|exchange/.test(error.message ?? ''));
+}
+
+function done(path = '/finance') {
+  revalidatePath('/finance', 'layout');
+  // The transaction list is date-filtered; invalidate its page explicitly so
+  // a newly saved row is visible immediately after the redirect.
+  revalidatePath('/finance/transactions', 'page');
+  redirect(path);
+}
 
 function fail(path: string, error: unknown): never {
-  const message = error instanceof Error ? error.message : 'Something went wrong';
+  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : 'Something went wrong';
   redirect(`${path}${path.includes('?') ? '&' : '?'}error=${encodeURIComponent(message)}`);
 }
 
@@ -124,20 +140,22 @@ export async function seedDefaults() {
 }
 
 export async function createWallet(formData: FormData) {
-  await checked('/finance/wallets', async () => {
+  const failure = await retainedSave(async () => {
     const { supabase, userId } = await requireUser();
-    const result = await supabase.from('wallets').insert({ user_id: userId, name: required(formData,'name','Wallet name'), type: enumValue(formData,'type', walletTypes, 'cash') as WalletKind, currency: (value(formData,'currency') || 'IDR').toUpperCase(), initial_balance: amount(formData,'initial_balance') });
-    redirectOnError('/finance/wallets', result.error);
+    const result = await supabase.from('wallets').insert({ user_id: userId, name: required(formData,'name','Wallet name'), type: enumValue(formData,'type', walletTypes, 'cash') as WalletKind, currency: currencyValue(formData), initial_balance: amount(formData,'initial_balance') });
+    if (result.error) throw new Error(result.error.message);
   });
+  if (failure) return failure;
   done('/finance/wallets');
 }
 
 export async function updateWallet(formData: FormData) {
-  await checked('/finance/wallets', async () => {
+  const failure = await retainedSave(async () => {
     const { supabase, userId } = await requireUser();
-    const result = await supabase.from('wallets').update({ name: required(formData,'name','Wallet name'), type: enumValue(formData,'type', walletTypes, 'cash') as WalletKind, currency: (value(formData,'currency') || 'IDR').toUpperCase(), initial_balance: amount(formData,'initial_balance') }).eq('id', required(formData,'id','Wallet ID')).eq('user_id', userId);
-    redirectOnError('/finance/wallets', result.error);
+    const result = await supabase.from('wallets').update({ name: required(formData,'name','Wallet name'), type: enumValue(formData,'type', walletTypes, 'cash') as WalletKind, currency: currencyValue(formData), initial_balance: amount(formData,'initial_balance') }).eq('id', required(formData,'id','Wallet ID')).eq('user_id', userId);
+    if (result.error) throw new Error(result.error.message);
   });
+  if (failure) return failure;
   done('/finance/wallets');
 }
 
@@ -160,20 +178,22 @@ export async function archiveWallet(formData: FormData) {
 }
 
 export async function createCategory(formData: FormData) {
-  await checked('/finance/settings', async () => {
+  const failure = await retainedSave(async () => {
     const { supabase, userId } = await requireUser();
     const result = await supabase.from('categories').insert({ user_id: userId, name: required(formData,'name','Category name'), type: enumValue(formData,'type', transactionTypes, 'expense') as TransactionKind, color: value(formData,'color') || '#64748b', icon: value(formData,'icon') || 'circle', is_default: false });
-    redirectOnError('/finance/settings', result.error);
+    if (result.error) throw new Error(result.error.message);
   });
+  if (failure) return failure;
   done('/finance/settings');
 }
 
 export async function updateCategory(formData: FormData) {
-  await checked('/finance/settings', async () => {
+  const failure = await retainedSave(async () => {
     const { supabase, userId } = await requireUser();
     const result = await supabase.from('categories').update({ name: required(formData,'name','Category name'), type: enumValue(formData,'type', transactionTypes, 'expense') as TransactionKind, color: value(formData,'color') || '#64748b', icon: value(formData,'icon') || 'circle' }).eq('id', required(formData,'id','Category ID')).eq('user_id', userId);
-    redirectOnError('/finance/settings', result.error);
+    if (result.error) throw new Error(result.error.message);
   });
+  if (failure) return failure;
   done('/finance/settings');
 }
 
@@ -186,61 +206,77 @@ export async function deleteCategory(formData: FormData) {
   done('/finance/settings');
 }
 
+async function retainedSave(task: () => Promise<void>) {
+  try { await task(); } catch (error) {
+    if (typeof error === 'object' && error !== null && 'digest' in error && String(error.digest).startsWith('NEXT_REDIRECT')) throw error;
+    return { error: error instanceof Error ? error.message : 'Unable to save. Please try again.' };
+  }
+}
+
 export async function createTransaction(formData: FormData) {
-  await checked('/finance/transactions', async () => {
+  const transactionDate = dateValue(formData, 'date');
+  const failure = await retainedSave(async () => {
     const { supabase, userId } = await requireUser();
     const type = enumValue(formData,'type', transactionTypes, 'expense') as TransactionKind;
-    const result = await supabase.from('transactions').insert({ user_id: userId, wallet_id: required(formData,'wallet_id','Wallet'), category_id: required(formData,'category_id','Category'), type, amount: requiredAmount(formData,'amount','Amount'), transaction_date: dateValue(formData,'date'), note: value(formData,'note') || null });
-    redirectOnError('/finance/transactions', result.error);
+    const result = await supabase.from('transactions').insert({ user_id: userId, wallet_id: required(formData,'wallet_id','Wallet'), category_id: value(formData,'category_id') || null, type, amount: requiredAmount(formData,'amount','Amount'), transaction_date: transactionDate, note: value(formData,'note') || null });
+    if (result.error) throw new Error(result.error.message);
   });
-  done('/finance/transactions');
+  if (failure) return failure;
+  done(`/finance/transactions?date=${encodeURIComponent(transactionDate)}`);
 }
 
 export async function updateTransaction(formData: FormData) {
-  await checked('/finance/transactions', async () => {
+  const transactionDate = dateValue(formData, 'date');
+  const failure = await retainedSave(async () => {
     const { supabase, userId } = await requireUser();
-    const result = await supabase.from('transactions').update({ wallet_id: required(formData,'wallet_id','Wallet'), category_id: required(formData,'category_id','Category'), type: enumValue(formData,'type', transactionTypes, 'expense') as TransactionKind, amount: requiredAmount(formData,'amount','Amount'), transaction_date: dateValue(formData,'date'), note: value(formData,'note') || null }).eq('id', required(formData,'id','Transaction ID')).eq('user_id', userId);
-    redirectOnError('/finance/transactions', result.error);
+    const result = await supabase.from('transactions').update({ wallet_id: required(formData,'wallet_id','Wallet'), category_id: value(formData,'category_id') || null, type: enumValue(formData,'type', transactionTypes, 'expense') as TransactionKind, amount: requiredAmount(formData,'amount','Amount'), transaction_date: transactionDate, note: value(formData,'note') || null }).eq('id', required(formData,'id','Transaction ID')).eq('user_id', userId);
+    if (result.error) throw new Error(result.error.message);
   });
-  done('/finance/transactions');
+  if (failure) return failure;
+  done(`/finance/transactions?date=${encodeURIComponent(transactionDate)}`);
 }
 
 export async function deleteTransaction(formData: FormData) {
-  await checked('/finance/transactions', async () => {
+  const transactionDate = value(formData, 'date');
+  await checked(`/finance/transactions${transactionDate ? `?date=${encodeURIComponent(transactionDate)}` : ''}`, async () => {
     const { supabase, userId } = await requireUser();
     const result = await supabase.from('transactions').delete().eq('id', required(formData,'id','Transaction ID')).eq('user_id', userId);
-    redirectOnError('/finance/transactions', result.error);
+    redirectOnError(`/finance/transactions${transactionDate ? `?date=${encodeURIComponent(transactionDate)}` : ''}`, result.error);
   });
-  done('/finance/transactions');
+  done(`/finance/transactions${transactionDate ? `?date=${encodeURIComponent(transactionDate)}` : ''}`);
 }
 
 export async function createTransfer(formData: FormData) {
-  await checked('/finance/transactions', async () => {
+  const transferDate = dateValue(formData, 'date');
+  const failure = await retainedSave(async () => {
     const { supabase, userId } = await requireUser();
     const from = required(formData,'from_wallet_id','Source wallet');
     const to = required(formData,'to_wallet_id','Destination wallet');
     if (from === to) throw new Error('Source and destination wallet must be different');
-    const result = await supabase.from('transfers').insert({ user_id: userId, from_wallet_id: from, to_wallet_id: to, amount: requiredAmount(formData,'amount','Amount'), transfer_date: dateValue(formData,'date'), note: value(formData,'note') || null });
-    redirectOnError('/finance/transactions', result.error);
+    const result = await supabase.from('transfers').insert({ user_id: userId, from_wallet_id: from, to_wallet_id: to, amount: requiredAmount(formData,'amount','Amount'), transfer_date: transferDate, note: value(formData,'note') || null });
+    if (result.error) throw new Error(result.error.message);
   });
-  done('/finance/transactions');
+  if (failure) return failure;
+  done(`/finance/transactions?date=${encodeURIComponent(transferDate)}`);
 }
 
 export async function createLoan(formData: FormData) {
-  await checked('/finance/loans', async () => {
+  const failure = await retainedSave(async () => {
     const { supabase, userId } = await requireUser();
     const result = await supabase.from('loans').insert({ user_id: userId, wallet_id: required(formData,'wallet_id','Wallet'), direction: enumValue(formData,'direction', loanDirections, 'give') as LoanDirectionKind, person_name: required(formData,'person_name','Person name'), amount: requiredAmount(formData,'amount','Amount'), loan_date: dateValue(formData,'date'), due_date: value(formData,'due_date') || null, status: 'open', note: value(formData,'note') || null });
-    redirectOnError('/finance/loans', result.error);
+    if (result.error) throw new Error(result.error.message);
   });
+  if (failure) return failure;
   done('/finance/loans');
 }
 
 export async function updateLoan(formData: FormData) {
-  await checked('/finance/loans', async () => {
+  const failure = await retainedSave(async () => {
     const { supabase, userId } = await requireUser();
     const result = await supabase.from('loans').update({ wallet_id: required(formData,'wallet_id','Wallet'), direction: enumValue(formData,'direction', loanDirections, 'give') as LoanDirectionKind, person_name: required(formData,'person_name','Person name'), amount: requiredAmount(formData,'amount','Amount'), loan_date: dateValue(formData,'date'), due_date: value(formData,'due_date') || null, status: enumValue(formData,'status', loanStatuses, 'open') as LoanStatusKind, note: value(formData,'note') || null }).eq('id', required(formData,'id','Loan ID')).eq('user_id', userId);
-    redirectOnError('/finance/loans', result.error);
+    if (result.error) throw new Error(result.error.message);
   });
+  if (failure) return failure;
   done('/finance/loans');
 }
 
@@ -263,11 +299,12 @@ export async function settleLoan(formData: FormData) {
 }
 
 export async function createBudget(formData: FormData) {
-  await checked('/finance/budgets', async () => {
+  const failure = await retainedSave(async () => {
     const { supabase, userId } = await requireUser();
     const result = await supabase.from('budgets').upsert({ user_id: userId, category_id: required(formData,'category_id','Category'), month: monthValue(formData,'month'), amount: amount(formData,'amount') }, { onConflict: 'user_id,category_id,month' });
-    redirectOnError('/finance/budgets', result.error);
+    if (result.error) throw new Error(result.error.message);
   });
+  if (failure) return failure;
   done('/finance/budgets');
 }
 
@@ -281,20 +318,39 @@ export async function deleteBudget(formData: FormData) {
 }
 
 export async function createBtcLog(formData: FormData) {
-  await checked('/finance/btc', async () => {
+  const failure = await retainedSave(async () => {
     const { supabase, userId } = await requireUser();
-    const result = await supabase.from('btc_dca_logs').insert({ user_id: userId, buy_date: dateValue(formData,'date'), fiat_amount: requiredAmount(formData,'fiat_amount','Fiat amount'), btc_amount: requiredAmount(formData,'btc_amount','BTC amount'), fee_amount: amount(formData,'fee_amount'), exchange: value(formData,'exchange') || null, note: value(formData,'note') || null });
-    redirectOnError('/finance/btc', result.error);
+    const date = dateValue(formData, 'date');
+    const values = { user_id: userId, fiat_amount: requiredAmount(formData,'fiat_amount','Fiat amount'), btc_amount: requiredAmount(formData,'btc_amount','BTC amount'), fee_amount: amount(formData,'fee_amount'), note: value(formData,'note') || null };
+    let result = await supabase.from('btc_dca_logs').insert({ ...values, buy_date: date, exchange: value(formData,'exchange') || null });
+    if (result.error && isBtcSchemaError(result.error)) {
+      result = await supabase.from('btc_dca_logs').insert({ ...values, log_date: date, exchange: value(formData,'exchange') || null });
+    }
+    if (result.error) {
+      if (isBtcSchemaError(result.error)) throw new Error('Database BTC belum diperbarui. Jalankan migrasi supabase/migrations/011_btc_exchange.sql untuk menambahkan kolom exchange; draft Anda tetap tersedia.');
+      throw new Error(result.error.message);
+    }
   });
+  if (failure) return failure;
   done('/finance/btc');
 }
 
 export async function updateBtcLog(formData: FormData) {
-  await checked('/finance/btc', async () => {
+  const failure = await retainedSave(async () => {
     const { supabase, userId } = await requireUser();
-    const result = await supabase.from('btc_dca_logs').update({ buy_date: dateValue(formData,'date'), fiat_amount: requiredAmount(formData,'fiat_amount','Fiat amount'), btc_amount: requiredAmount(formData,'btc_amount','BTC amount'), fee_amount: amount(formData,'fee_amount'), exchange: value(formData,'exchange') || null, note: value(formData,'note') || null }).eq('id', required(formData,'id','BTC log ID')).eq('user_id', userId);
-    redirectOnError('/finance/btc', result.error);
+    const date = dateValue(formData, 'date');
+    const id = required(formData, 'id', 'BTC log ID');
+    const values = { fiat_amount: requiredAmount(formData,'fiat_amount','Fiat amount'), btc_amount: requiredAmount(formData,'btc_amount','BTC amount'), fee_amount: amount(formData,'fee_amount'), note: value(formData,'note') || null };
+    let result = await supabase.from('btc_dca_logs').update({ ...values, buy_date: date, exchange: value(formData,'exchange') || null }).eq('id', id).eq('user_id', userId);
+    if (result.error && isBtcSchemaError(result.error)) {
+      result = await supabase.from('btc_dca_logs').update({ ...values, log_date: date, exchange: value(formData,'exchange') || null }).eq('id', id).eq('user_id', userId);
+    }
+    if (result.error) {
+      if (isBtcSchemaError(result.error)) throw new Error('Database BTC belum diperbarui. Jalankan migrasi supabase/migrations/011_btc_exchange.sql untuk menambahkan kolom exchange; draft Anda tetap tersedia.');
+      throw new Error(result.error.message);
+    }
   });
+  if (failure) return failure;
   done('/finance/btc');
 }
 
@@ -308,20 +364,22 @@ export async function deleteBtcLog(formData: FormData) {
 }
 
 export async function createNetWorth(formData: FormData) {
-  await checked('/finance/net-worth', async () => {
+  const failure = await retainedSave(async () => {
     const { supabase, userId } = await requireUser();
     const result = await supabase.from('net_worth_snapshots').insert({ user_id: userId, snapshot_date: dateValue(formData,'date'), assets_amount: amount(formData,'assets_amount'), liabilities_amount: amount(formData,'liabilities_amount'), note: value(formData,'note') || null });
-    redirectOnError('/finance/net-worth', result.error);
+    if (result.error) throw new Error(result.error.message);
   });
+  if (failure) return failure;
   done('/finance/net-worth');
 }
 
 export async function updateNetWorth(formData: FormData) {
-  await checked('/finance/net-worth', async () => {
+  const failure = await retainedSave(async () => {
     const { supabase, userId } = await requireUser();
     const result = await supabase.from('net_worth_snapshots').update({ snapshot_date: dateValue(formData,'date'), assets_amount: amount(formData,'assets_amount'), liabilities_amount: amount(formData,'liabilities_amount'), note: value(formData,'note') || null }).eq('id', required(formData,'id','Net worth snapshot ID')).eq('user_id', userId);
-    redirectOnError('/finance/net-worth', result.error);
+    if (result.error) throw new Error(result.error.message);
   });
+  if (failure) return failure;
   done('/finance/net-worth');
 }
 
@@ -333,5 +391,3 @@ export async function deleteNetWorth(formData: FormData) {
   });
   done('/finance/net-worth');
 }
-
-

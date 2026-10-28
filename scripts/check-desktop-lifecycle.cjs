@@ -70,7 +70,12 @@ function launch({ args = [], packaged = true, userData = tempDirectory('lifeos-t
 
   const Menu = { setApplicationMenu() {}, buildFromTemplate: (template) => ({ template }) };
   const ipcMain = { handle() {} };
-  const electron = { app, BrowserWindow, Tray, Menu, ipcMain, dialog: { showErrorBox() {} }, safeStorage: { isEncryptionAvailable: () => true } };
+  class NotificationMock extends EventEmitter {
+    constructor(options) { super(); this.options = options; }
+    static isSupported() { return true; }
+    show() {}
+  }
+  const electron = { app, BrowserWindow, Tray, Menu, ipcMain, Notification: NotificationMock, dialog: { showErrorBox() {} }, safeStorage: { isEncryptionAvailable: () => true } };
   const updater = new EventEmitter();
   updater.checkForUpdatesAndNotify = () => Promise.resolve();
   updater.quitAndInstall = () => app.quit();

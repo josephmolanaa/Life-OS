@@ -22,7 +22,7 @@ export function ChromeControls({ expanded = false }: { expanded?: boolean }) {
 
   function applyTheme(next: boolean) {
     document.documentElement.classList.toggle('dark-mode', next);
-    localStorage.setItem('finance-theme', next ? 'dark' : 'light');
+    try { localStorage.setItem('finance-theme', next ? 'dark' : 'light'); } catch { /* Theme still works for this page. */ }
   }
 
   function toggleTheme(event: MouseEvent<HTMLButtonElement>) {
@@ -45,11 +45,11 @@ export function ChromeControls({ expanded = false }: { expanded?: boolean }) {
   }
 
   return <div className={`chromeControls ${expanded ? 'settingsPreferenceControls' : ''}`}>
-    <button className="themeSwitch" type="button" onClick={toggleTheme} aria-label="Toggle theme" aria-pressed={darkMode} title={darkMode ? 'Light mode' : 'Dark mode'}>
+    <button className="themeSwitch" type="button" onClick={toggleTheme} aria-label={lang === 'id' ? 'Ganti tema' : 'Toggle theme'} aria-pressed={darkMode} title={darkMode ? 'Light mode' : 'Dark mode'}>
       <span className="themeSwitchTrack" aria-hidden="true"><span className="themeSwitchThumb">{darkMode ? <Moon size={17}/> : <CloudSun size={19}/>}</span></span>
       {expanded && <span>{darkMode ? (lang === 'id' ? 'Tema gelap' : 'Dark theme') : (lang === 'id' ? 'Tema terang' : 'Light theme')}</span>}
     </button>
-    <button className="languageControl" type="button" onClick={() => changeLang(lang === 'en' ? 'id' : 'en')} aria-label="Toggle language" title={lang === 'en' ? 'Switch to Indonesian' : 'Switch to English'}>
+    <button className="languageControl" type="button" onClick={() => changeLang(lang === 'en' ? 'id' : 'en')} aria-label={lang === 'id' ? 'Ganti bahasa' : 'Toggle language'} title={lang === 'en' ? 'Switch to Indonesian' : 'Switch to English'}>
       <span className={`languageFlag languageFlag-${lang}`} aria-hidden="true" />
       <span>{lang.toUpperCase()}</span>
     </button>
@@ -60,6 +60,6 @@ export function SidebarToggleButton() {
   return <button className="iconBtn sidebarToggle inSidebarToggle" type="button" onClick={() => {
     const next = !document.documentElement.classList.contains('sidebar-collapsed');
     document.documentElement.classList.toggle('sidebar-collapsed', next);
-    localStorage.setItem('finance-sidebar-collapsed', String(next));
+    try { localStorage.setItem('finance-sidebar-collapsed', String(next)); } catch { /* Sidebar remains usable. */ }
   }} aria-label="Toggle sidebar"><ChevronLeft className="sidebarToggleChevron" size={20} aria-hidden="true"/></button>;
 }

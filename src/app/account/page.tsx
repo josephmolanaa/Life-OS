@@ -54,6 +54,7 @@ function getLang(): 'en' | 'id' {
 export default function AccountPage() {
   const supabase = createClient();
   const [lang, setLang] = useState<'en' | 'id'>('en');
+  const [savedProfile, setSavedProfile] = useState({ email: '', displayName: '', avatarUrl: '' });
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
@@ -75,8 +76,9 @@ export default function AccountPage() {
       setEmail(data.user.email ?? '');
       setDisplayName(String(data.user.user_metadata?.display_name ?? data.user.email?.split('@')[0] ?? ''));
       setAvatarUrl(data.user.user_metadata?.avatar_url ?? '');
+      setSavedProfile({ email: data.user.email ?? '', displayName: String(data.user.user_metadata?.display_name ?? data.user.email?.split('@')[0] ?? ''), avatarUrl: data.user.user_metadata?.avatar_url ?? '' });
       setLoading(false);
-    });
+    }).catch(() => { setError('Could not load profile. Reload to retry.'); setLoading(false); });
   }, [supabase]);
 
   async function saveAccount(event: FormEvent<HTMLFormElement>) {
@@ -88,23 +90,28 @@ export default function AccountPage() {
     const updates: { email?: string; password?: string; data: { display_name: string; avatar_url?: string } } = {
       data: { display_name: displayName.trim(), avatar_url: avatarUrl.trim() || undefined },
     };
-    if (email.trim()) updates.email = email.trim();
+    if (email.trim() !== savedProfile.email) updates.email = email.trim();
     if (password) updates.password = password;
 
-    const { error } = await supabase.auth.updateUser(updates);
-    setSaving(false);
+    try {
+    const { data, error } = await supabase.auth.updateUser(updates);
     if (error) {
       setError(error.message);
     } else {
+      const nextEmail = data.user?.email ?? savedProfile.email;
+      setSavedProfile({ email: nextEmail, displayName: displayName.trim(), avatarUrl: avatarUrl.trim() });
+      setEmail(nextEmail);
       setPassword('');
       setMessage(updates.email ? t.savedEmail : t.saved);
     }
+    } catch { setError(lang === 'id' ? 'Gagal menyimpan. Perubahan masih tersedia; coba lagi.' : 'Could not save. Your changes are preserved; try again.'); }
+    finally { setSaving(false); }
   }
 
   function handleAvatarClick() {
     const url = prompt(t.avatarPrompt);
     if (url?.trim()) {
-      setAvatarUrl(url.trim());
+      try { const parsed = new URL(url.trim()); if (!['https:', 'http:'].includes(parsed.protocol)) throw new Error(); setAvatarUrl(parsed.href); } catch { setError(lang === 'id' ? 'Gunakan URL gambar HTTP atau HTTPS.' : 'Use an HTTP or HTTPS image URL.'); }
     }
   }
 
@@ -149,11 +156,11 @@ export default function AccountPage() {
           <ContentSkeleton blocks={2} />
         ) : (
           <form onSubmit={saveAccount}>
-            {error && <div className="alert-box alert-error">
+            {error && <div role="alert" className="alert-box alert-error">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
               {error}
             </div>}
-            {message && <div className="alert-box alert-success">
+            {message && <div role="status" className="alert-box alert-success">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
               {message}
             </div>}
@@ -164,6 +171,8 @@ export default function AccountPage() {
                 className="account-avatar-btn"
                 onClick={handleAvatarClick}
                 title={t.avatarClick}
+                aria-label={t.avatarClick}
+                disabled={saving}
               >
                 {avatarUrl ? <Image unoptimized width={80} height={80} src={avatarUrl} alt={displayName} onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : initial}
               </button>
@@ -179,12 +188,12 @@ export default function AccountPage() {
                 
                 <div className="settings-field">
                   <label htmlFor="displayName">{t.displayName}</label>
-                  <input id="displayName" className="input" value={displayName} onChange={(e) => setDisplayName(e.target.value)} autoComplete="name" />
+                  <input disabled={saving} id="displayName" className="input" value={displayName} onChange={(e) => setDisplayName(e.target.value)} autoComplete="name" />
                 </div>
 
                 <div className="settings-field">
                   <label htmlFor="email">{t.email}</label>
-                  <input id="email" className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required />
+                  <input disabled={saving} id="email" className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required />
                   <div className="help-text">{t.emailHint}</div>
                 </div>
               </section>
@@ -194,22 +203,23 @@ export default function AccountPage() {
                 
                 <div className="settings-field">
                   <label htmlFor="password">{t.password}</label>
-                  <input id="password" className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} autoComplete="new-password" placeholder="••••••••" />
+                  <input disabled={saving} id="password" className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} autoComplete="new-password" placeholder="••••••••" />
                   <div className="help-text">{t.passwordHint}</div>
                 </div>
               </section>
 
               <div className="account-actions">
-                <button className="btn-secondary" type="reset" onClick={() => {
-                  setDisplayName(displayName);
-                  setEmail(email);
-                  setAvatarUrl(avatarUrl);
+                <button className="btn-secondary" type="button" disabled={saving} onClick={() => {
+                  setDisplayName(savedProfile.displayName);
+                  setEmail(savedProfile.email);
+                  setAvatarUrl(savedProfile.avatarUrl);
                   setPassword('');
                   setError('');
+                  setMessage('');
                 }}>
                   {t.cancel}
                 </button>
-                <button className="btn-primary" type="submit" disabled={saving}>
+                <button className="btn-primary" type="submit" disabled={saving || !savedProfile.email}>
                   {saving ? t.saving : t.save}
                 </button>
               </div>
