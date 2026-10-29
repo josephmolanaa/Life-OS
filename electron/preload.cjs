@@ -13,5 +13,13 @@ contextBridge.exposeInMainWorld('lifeOsActivity', {
 
 contextBridge.exposeInMainWorld('lifeOsUpdater', {
   getVersion: () => ipcRenderer.invoke('lifeos:get-version'),
+  getStatus: () => ipcRenderer.invoke('lifeos:update-status'),
   checkForUpdates: () => ipcRenderer.invoke('lifeos:check-for-updates'),
+  downloadUpdate: () => ipcRenderer.invoke('lifeos:download-update'),
+  installUpdate: () => ipcRenderer.invoke('lifeos:install-update'),
+  onStatus: (listener) => {
+    const handler = (_event, state) => listener(state);
+    ipcRenderer.on('lifeos:update-state', handler);
+    return () => ipcRenderer.removeListener('lifeos:update-state', handler);
+  },
 });

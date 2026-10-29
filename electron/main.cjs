@@ -146,20 +146,57 @@ ipcMain.handle('lifeos:get-version', (event) => {
   return app.getVersion();
 });
 
-ipcMain.handle('lifeos:check-for-updates', async (event) => {
+let updateState = { status: 'idle' };
+let updateCheck;
+let updateDownload;
+function setUpdateState(state) {
+  updateState = state;
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('lifeos:update-state', state);
+}
+function updateError(error) {
+  console.error('Auto-update failed:', error);
+  const message = String(error?.message || error);
+  const code = /404|latest\.yml|ERR_UPDATER_(CHANNEL_FILE_NOT_FOUND|NO_PUBLISHED_VERSIONS|INVALID_RELEASE_FEED)/i.test(message)
+    ? 'release' : /ENOTFOUND|ETIMEDOUT|ECONN|ERR_INTERNET|ERR_NETWORK/i.test(message) ? 'network' : 'update';
+  setUpdateState({ status: 'error', code });
+}
+function checkUpdates(updater) {
+  if (['downloading', 'downloaded'].includes(updateState.status)) return Promise.resolve(updateState);
+  if (!updateCheck) {
+    updateCheck = updater.checkForUpdates().then(result => {
+      result?.downloadPromise?.catch(updateError);
+      return updateState;
+    }).catch(error => {
+      updateError(error);
+      return updateState;
+    }).finally(() => { updateCheck = undefined; });
+  }
+  return updateCheck;
+}
+ipcMain.handle('lifeos:update-status', event => {
+  assertLocalWindow(event);
+  return app.isPackaged ? updateState : { status: 'unsupported' };
+});
+ipcMain.handle('lifeos:check-for-updates', async event => {
   assertLocalWindow(event);
   const updater = configureAutoUpdater();
-  if (!updater) return { status: 'unsupported', version: app.getVersion() };
-  try {
-    const result = await updater.checkForUpdates();
-    const latest = result?.updateInfo?.version;
-    return latest && latest !== app.getVersion()
-      ? { status: 'available', version: latest }
-      : { status: 'current', version: app.getVersion() };
-  } catch (error) {
-    console.error('Manual update check failed:', error);
-    return { status: 'error', version: app.getVersion() };
+  return updater ? checkUpdates(updater) : { status: 'unsupported', version: app.getVersion() };
+});
+ipcMain.handle('lifeos:download-update', async event => {
+  assertLocalWindow(event);
+  const updater = configureAutoUpdater();
+  if (!updater || updateState.status !== 'available') return updateState;
+  if (!updateDownload) {
+    setUpdateState({ ...updateState, status: 'downloading', percent: 0 });
+    updateDownload = updater.downloadUpdate().catch(updateError).finally(() => { updateDownload = undefined; });
   }
+  await updateDownload;
+  return updateState;
+});
+ipcMain.handle('lifeos:install-update', event => {
+  assertLocalWindow(event);
+  if (updateState.status !== 'downloaded') throw new Error('Update is not ready');
+  setImmediate(() => autoUpdater.quitAndInstall(false, true));
 });
 
 ipcMain.handle('lifeos:encrypt-ai-key', (event, value) => {
@@ -277,9 +314,13 @@ function configureAutoUpdater() {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.allowPrerelease = false;
-  autoUpdater.on('error', (error) => console.error('Auto-update failed:', error));
+  autoUpdater.on('error', updateError);
+  autoUpdater.on('checking-for-update', () => setUpdateState({ status: 'checking' }));
+  autoUpdater.on('update-not-available', () => setUpdateState({ status: 'current', version: app.getVersion() }));
+  autoUpdater.on('download-progress', info => setUpdateState({ ...updateState, status: 'downloading', percent: Math.min(100, Math.max(0, info.percent || 0)) }));
   autoUpdater.on('update-available', (info) => {
     const version = info?.version || '';
+    setUpdateState({ status: autoUpdater.autoDownload ? 'downloading' : 'available', version, percent: 0 });
     console.log('Update available:', version);
     if (Notification.isSupported()) {
       new Notification({
@@ -290,6 +331,7 @@ function configureAutoUpdater() {
   });
   autoUpdater.on('update-downloaded', (info) => {
     const version = info?.version || '';
+    setUpdateState({ status: 'downloaded', version, percent: 100 });
     console.log('Update downloaded:', version);
     if (Notification.isSupported()) {
       const notification = new Notification({
@@ -303,7 +345,7 @@ function configureAutoUpdater() {
     }
     // Jika tidak diklik segera, pembaruan tetap terpasang otomatis saat aplikasi ditutup
   });
-  autoUpdater.checkForUpdatesAndNotify().catch((error) => console.error('Update check failed:', error));
+  void checkUpdates(autoUpdater);
   return autoUpdater;
 }
 
