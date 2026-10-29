@@ -77,7 +77,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Artifact upload failed' }
           $assets = gh release view $tag --json assets --jq '.assets[].name'
           if ($LASTEXITCODE -ne 0) { throw 'Asset verification failed' }
-          foreach ($name in @("Life-OS-Setup-$version.exe", "Life-OS-Setup-$version.exe.blockmap", 'latest.yml')) {
+          foreach ($name in @("Life.OS.Setup.$version.exe", "Life.OS.Setup.$version.exe.blockmap", 'latest.yml')) {
             if ($name -notin $assets) { throw "Published asset missing: $name" }
           }
           gh release edit $tag --draft=false --latest
