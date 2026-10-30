@@ -99,6 +99,15 @@ ipcMain.handle('lifeos:duckies-set-settings', (event, input) => {
   return next;
 });
 ipcMain.on('lifeos:duckies-resize', (event, bounds) => { assertDuckiesWindow(event); resizeDuckies(bounds?.height, bounds?.width); });
+// The window never resizes (a resized transparent window repaints blank on Windows = blink). Instead the
+// renderer reports the pill rect and the OS clips the window to it: outside is invisible and click-through.
+const duckiesCanvas = { width: 600, height: 260 };
+ipcMain.on('lifeos:duckies-shape', (event, rect) => {
+  assertDuckiesWindow(event);
+  const values = [rect?.x, rect?.y, rect?.width, rect?.height];
+  if (!values.every(Number.isInteger) || rect.x < 0 || rect.y < 0 || rect.width < 1 || rect.height < 1 || rect.x + rect.width > duckiesCanvas.width || rect.y + rect.height > duckiesCanvas.height) throw new Error('Invalid Duckies shape');
+  if (duckiesWindow && !duckiesWindow.isDestroyed()) duckiesWindow.setShape([{ x: rect.x, y: rect.y, width: rect.width, height: rect.height }]);
+});
 
 // Every Life OS desktop notification drops into the island when Duckies is on; the OS toast is the fallback.
 function showDesktopNotification(title, body, tone = 'green', onClick) {
@@ -125,16 +134,16 @@ function resizeDuckies(height, width) {
   if (!duckiesWindow || duckiesWindow.isDestroyed()) return;
   if (!Number.isInteger(height) || !Number.isInteger(width) || height < 32 || height > 480 || width < 60 || width > 900) throw new Error('Invalid Duckies bounds');
   const { width: screenWidth } = require('electron').screen.getPrimaryDisplay().workAreaSize;
-  duckiesWindow.setBounds({ x: Math.round((screenWidth - width) / 2), y: 0, width, height });
+  duckiesWindow.setBounds({ x: Math.round((screenWidth - width) / 2), y: 8, width, height });
 }
 function createDuckiesWindow() {
   if (!app.isPackaged || !readDuckiesSettings().enabled || (duckiesWindow && !duckiesWindow.isDestroyed())) return;
   const { screen } = require('electron');
-  const width = 160;
-  const height = 36;
+  const { width, height } = duckiesCanvas;
   const screenWidth = screen.getPrimaryDisplay().workAreaSize.width;
-  // The window hugs the pill (renderer resizes it), so it is always clickable and never blocks the desktop.
-  duckiesWindow = new BrowserWindow({ width, height, x: Math.round((screenWidth - width) / 2), y: 0, frame: false, transparent: true, alwaysOnTop: true, skipTaskbar: true, resizable: false, movable: false, focusable: true, hasShadow: false, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false } });
+  // Fixed canvas clipped to the pill with setShape (see lifeos:duckies-shape).
+  duckiesWindow = new BrowserWindow({ width, height, x: Math.round((screenWidth - width) / 2), y: 8, frame: false, transparent: true, alwaysOnTop: true, skipTaskbar: true, resizable: false, movable: false, focusable: true, hasShadow: false, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false } });
+  duckiesWindow.setShape([{ x: (width - 160) / 2, y: 0, width: 160, height: 36 }]);
   duckiesWindow.setAlwaysOnTop(true, 'floating');
   duckiesWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   duckiesWindow.on('closed', () => { duckiesWindow = undefined; });

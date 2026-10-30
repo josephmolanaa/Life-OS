@@ -36,5 +36,5 @@ export function DuckiesSettings({ lang }: { lang: 'id' | 'en' }) {
 }
 
 declare global {
-  interface Window { lifeOsDuckies?: { getSettings: () => Promise<Settings>; setSettings: (settings: Settings) => Promise<Settings>; resize: (height: number, width: number) => void; showNotification?: (input: { title: string; body?: string; tone?: string }) => void; onToast?: (listener: (toast: { title: string; body: string; tone: string }) => void) => () => void; onSettings?: (listener: (settings: Settings) => void) => () => void } }
+  interface Window { lifeOsDuckies?: { getSettings: () => Promise<Settings>; setSettings: (settings: Settings) => Promise<Settings>; resize: (height: number, width: number) => void; setShape?: (rect: { x: number; y: number; width: number; height: number }) => void; showNotification?: (input: { title: string; body?: string; tone?: string }) => void; onToast?: (listener: (toast: { title: string; body: string; tone: string }) => void) => () => void; onSettings?: (listener: (settings: Settings) => void) => () => void } }
 }

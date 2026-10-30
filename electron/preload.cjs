@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('lifeOsDuckies', {
   getSettings: () => ipcRenderer.invoke('lifeos:duckies-settings'),
   setSettings: settings => ipcRenderer.invoke('lifeos:duckies-set-settings', settings),
   resize: (height, width) => ipcRenderer.send('lifeos:duckies-resize', { height, width }),
+  setShape: rect => ipcRenderer.send('lifeos:duckies-shape', rect),
   showNotification: input => ipcRenderer.send('lifeos:notify', { title: input.title, body: input.body || '', tone: input.tone }),
   onSettings: (listener) => {
     const handler = (_event, settings) => listener(settings);

@@ -103,55 +103,47 @@ export default function DuckiesPage() {
   }, [running, notify, id]);
 
   const mode = expanded ? 'expanded' : toast ? 'toast' : 'compact';
-  // Like iPhone: the island hugs whatever is showing. Measure the active layer and let CSS spring to it.
-  const layer = useRef<HTMLElement | null>(null);
-  const [fit, setFit] = useState<{ width: number; height: number } | null>(null);
-  useLayoutEffect(() => {
-    const node = layer.current;
-    if (!node || mode === 'expanded') { setFit(null); return; }
-    const measure = () => setFit({ width: Math.ceil(node.offsetWidth), height: Math.ceil(node.offsetHeight) });
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [mode, toast?.id]);
   const timerActive = running || seconds < focusSeconds;
-  // The window hugs the pill. Grow it before the CSS spring expands (so nothing clips),
-  // shrink it only after the spring settles (so the collapse stays visible).
-  // Grows apply at once; shrinks wait for the spring to settle and for the cursor to leave,
-  // so the window never slides out from under a hovering cursor.
-  const islandRef = useRef<HTMLElement | null>(null);
-  const windowSize = useRef<[number, number]>([0, 0]);
-  const hovering = useRef(false);
-  const shrinkTimer = useRef<number | undefined>(undefined);
-  const target = useRef<[number, number]>([0, 0]);
-  const applyWindow = useCallback(() => {
-    const [w, h] = target.current;
-    if (!w || (w === windowSize.current[0] && h === windowSize.current[1])) return;
-    windowSize.current = [w, h];
-    window.lifeOsDuckies?.resize(h, w);
+  // All three layers stay mounted and crossfade; only the black pill's size springs. Each layer is
+  // measured continuously so the pill always knows the size of what it is about to show.
+  const compactRef = useRef<HTMLElement | null>(null);
+  const toastRef = useRef<HTMLDivElement | null>(null);
+  const lastToast = useRef<Toast | null>(null);
+  if (toast) lastToast.current = toast;
+  const [compactSize, setCompactSize] = useState<[number, number]>([160, 36]);
+  const [toastSize, setToastSize] = useState<[number, number]>([300, 64]);
+  useLayoutEffect(() => {
+    const watch = (node: HTMLElement | null, set: (size: [number, number]) => void) => {
+      if (!node) return undefined;
+      const measure = () => set([Math.ceil(node.offsetWidth), Math.ceil(node.offsetHeight)]);
+      measure();
+      const observer = new ResizeObserver(measure);
+      observer.observe(node);
+      return observer;
+    };
+    const observers = [watch(compactRef.current, setCompactSize), watch(toastRef.current, setToastSize)];
+    return () => observers.forEach(observer => observer?.disconnect());
   }, []);
-  const scheduleShrink = useCallback(() => {
-    window.clearTimeout(shrinkTimer.current);
-    shrinkTimer.current = window.setTimeout(() => { if (!hovering.current) applyWindow(); }, 560);
-  }, [applyWindow]);
+  const [width, height] = mode === 'expanded' ? [560, 230] : mode === 'toast' ? toastSize : compactSize;
+  // The OS window never resizes (that is what blinked); it is clipped to the pill instead. Grow the clip
+  // before the spring opens, shrink it after the spring settles, with room for the soft shadow.
+  const islandRef = useRef<HTMLElement | null>(null);
+  const shape = useRef<[number, number]>([0, 0]);
   useEffect(() => {
-    const width = mode === 'expanded' ? 560 : fit?.width;
-    const height = mode === 'expanded' ? 230 : fit?.height;
-    if (!width || !height) return;
-    target.current = [Math.ceil(width) + 4, Math.ceil(height) + 4];
-    const [w, h] = windowSize.current;
-    if (target.current[0] >= w && target.current[1] >= h) { window.clearTimeout(shrinkTimer.current); applyWindow(); }
-    else scheduleShrink();
-  }, [mode, fit, applyWindow, scheduleShrink]);
-  // Hover intent: a short dwell opens, a short grace keeps it open while the cursor wobbles out.
+    const apply = () => {
+      shape.current = [width, height];
+      const pad = 18, canvas = 600;
+      const w = Math.min(canvas, width + pad * 2);
+      window.lifeOsDuckies?.setShape?.({ x: Math.max(0, Math.round((canvas - w) / 2)), y: 0, width: w, height: height + pad + 6 });
+    };
+    if (width >= shape.current[0] && height >= shape.current[1]) { apply(); return; }
+    const timer = window.setTimeout(apply, 560);
+    return () => window.clearTimeout(timer);
+  }, [width, height]);
+  // Hover intent: a short dwell opens, a short grace closes, so passing the cursor across doesn't flicker.
   const hoverTimer = useRef<number | undefined>(undefined);
-  const hoverIn = () => { hovering.current = true; window.clearTimeout(hoverTimer.current); hoverTimer.current = window.setTimeout(() => setExpanded(true), 120); };
-  const hoverOut = () => { hovering.current = false; window.clearTimeout(hoverTimer.current); hoverTimer.current = window.setTimeout(() => {
-    // Windows fires a spurious mouseleave when the window resizes under a still cursor; trust :hover instead.
-    if (islandRef.current?.matches(':hover')) { hovering.current = true; return; }
-    setExpanded(false);
-  }, 220); if (!expanded) scheduleShrink(); };
+  const hoverIn = () => { window.clearTimeout(hoverTimer.current); hoverTimer.current = window.setTimeout(() => setExpanded(true), 120); };
+  const hoverOut = () => { window.clearTimeout(hoverTimer.current); hoverTimer.current = window.setTimeout(() => setExpanded(false), 220); };
   const compactKind = timerActive ? 'live' : quests.todos.length || water ? 'split' : 'idle';
   const dndLabel = dnd ? (id ? 'Matikan Jangan Ganggu' : 'Turn off Do Not Disturb') : (id ? 'Nyalakan Jangan Ganggu' : 'Turn on Do Not Disturb');
   const bell = <button type="button" className={`islandBell ${dnd ? 'on' : ''}`} onClick={event => { event.stopPropagation(); toggleDnd(); }} aria-pressed={dnd} aria-label={dndLabel} title={dndLabel}>{dnd ? <BellOff size={14} aria-hidden="true" /> : <Bell size={14} aria-hidden="true" />}</button>;
@@ -170,13 +162,13 @@ export default function DuckiesPage() {
     ['quests', id ? 'Quest' : 'Quests', CheckSquare], ['timer', id ? 'Fokus' : 'Focus', Clock], ['water', id ? 'Air' : 'Water', Droplets], ['pet', 'Pet', Cat], ['shelf', 'Shelf', FolderDown],
   ];
 
-  return <main ref={islandRef} className={`island ${mode}`} style={fit ? { width: fit.width, height: fit.height } : undefined} onMouseEnter={hoverIn} onMouseLeave={hoverOut}>
-    {mode === 'compact' && compactKind === 'idle' && <div ref={node => { layer.current = node; }} className="islandLayer islandCompact idle">
+  return <main ref={islandRef} className={`island ${mode}`} style={{ width, height }} onMouseEnter={hoverIn} onMouseLeave={hoverOut}>
+    {compactKind === 'idle' && <div ref={node => { compactRef.current = node; }} className={`islandLayer islandCompact idle ${mode === 'compact' ? 'on' : ''}`} aria-hidden={mode !== 'compact'}>
       <button type="button" className="islandExpand" onClick={() => setExpanded(true)} aria-label={id ? 'Buka Duckies' : 'Open Duckies'}><PixelDuck /><span className="islandTime">{clock}</span></button>
       <span className="islandGap" aria-hidden="true" />
       {bell}
     </div>}
-    {mode === 'compact' && compactKind !== 'idle' && <button ref={node => { layer.current = node; }} type="button" className={`islandLayer islandCompact ${compactKind}`} onClick={() => setExpanded(true)} aria-label={id ? 'Buka Duckies' : 'Open Duckies'}>
+    {compactKind !== 'idle' && <button ref={node => { compactRef.current = node; }} type="button" className={`islandLayer islandCompact ${compactKind} ${mode === 'compact' ? 'on' : ''}`} aria-hidden={mode !== 'compact'} tabIndex={mode === 'compact' ? 0 : -1} onClick={() => setExpanded(true)} aria-label={id ? 'Buka Duckies' : 'Open Duckies'}>
       {timerActive ? <>
         <PixelDuck scene={running ? 'focus' : 'idle'} />
         <span className={`islandRing ${running ? 'live' : ''}`} style={{ ['--p' as string]: progress }} aria-hidden="true" />
@@ -189,12 +181,12 @@ export default function DuckiesPage() {
       </> : null}
     </button>}
 
-    {mode === 'toast' && toast && <div ref={node => { layer.current = node; }} key={toast.id} className={`islandLayer islandToast ${toast.tone}`} role="status" aria-live="polite">
-      <span className="islandToastIcon"><PixelDuck scene="success" size={28} /></span>
-      <div><b>{toast.title}</b><small>{toast.body}</small></div>
-    </div>}
+    <div ref={toastRef} className={`islandLayer islandToast ${lastToast.current?.tone ?? 'green'} ${mode === 'toast' ? 'on' : ''}`} role="status" aria-live="polite">
+      <span key={lastToast.current?.id} className="islandToastIcon"><PixelDuck scene="success" size={28} /></span>
+      <div><b>{lastToast.current?.title ?? 'Duckies'}</b><small>{lastToast.current?.body ?? ''}</small></div>
+    </div>
 
-    {mode === 'expanded' && <section className="islandLayer islandPanel" aria-label="Duckies">
+    <section className={`islandLayer islandPanel ${mode === 'expanded' ? 'on' : ''}`} aria-label="Duckies" aria-hidden={mode !== 'expanded'}>
       <header>
         <strong className="islandBrand"><PixelDuck size={28} />Duckies</strong>
         <nav aria-label={id ? 'Tab Duckies' : 'Duckies tabs'}>{tabs.map(([value, label, Icon]) => <button key={value} type="button" title={label} aria-label={label} aria-pressed={tab === value} className={tab === value ? 'active' : ''} onClick={() => setTab(value)}><Icon size={14} aria-hidden="true" /></button>)}</nav>
@@ -224,6 +216,6 @@ export default function DuckiesPage() {
         {tab === 'pet' && <div className="islandPet"><PixelDuck scene={done === quests.todos.length && quests.todos.length ? 'success' : 'idle'} size={84} /><div><b>Ducky</b><p>{done === quests.todos.length && quests.todos.length ? (id ? 'Semua quest beres. Mantap!' : 'All quests done. Nice!') : (id ? 'Selesaikan quest sebelum hari berganti.' : 'Finish your quests before the day ends.')}</p></div></div>}
         {tab === 'shelf' && <div className="islandShelf" onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); setFileName(event.dataTransfer.files[0]?.name || ''); }}><FolderDown size={20} aria-hidden="true" /><span>{fileName || (id ? 'Taruh file di sini (sementara).' : 'Drop a file here (temporary).')}</span></div>}
       </div>
-    </section>}
+    </section>
   </main>;
 }

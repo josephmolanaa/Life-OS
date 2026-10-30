@@ -72,6 +72,7 @@ function launch({ args = [], packaged = true, userData = tempDirectory('lifeos-t
     setAlwaysOnTop() {}
     setVisibleOnAllWorkspaces() {}
     setIgnoreMouseEvents(ignore) { this.ignoreMouse = ignore; }
+    setShape(rects) { this.shape = rects; }
   }
   class Tray extends EventEmitter {
     constructor() { super(); if (trayFailure) throw new Error('tray unavailable'); Tray.instance = this; }
@@ -288,13 +289,18 @@ async function checkUpdater() {
   const notch = duckiesDesktop.windows[1];
   const notchEvent = { sender: notch.webContents, senderFrame: notch.webContents.mainFrame };
   duckiesDesktop.listeners.get('lifeos:duckies-resize')(notchEvent, { height: 190, width: 640 });
-  assert.deepEqual(JSON.parse(JSON.stringify(notch.bounds)), { x: 640, y: 0, width: 640, height: 190 });
+  assert.deepEqual(JSON.parse(JSON.stringify(notch.bounds)), { x: 640, y: 8, width: 640, height: 190 });
   assert.ok(typeof duckiesApi.onSettings === 'function');
-  // Window hugs the pill: never click-through, so hover and clicks always reach it.
+  // Fixed canvas clipped to the pill: the window never resizes, and only the pill area is visible/clickable.
+  assert.equal(notch.options.width, 600);
+  assert.equal(notch.options.height, 260);
   assert.equal(notch.ignoreMouse, undefined);
-  duckiesDesktop.listeners.get('lifeos:duckies-resize')(notchEvent, { height: 40, width: 76 });
-  assert.deepEqual(JSON.parse(JSON.stringify(notch.bounds)), { x: 922, y: 0, width: 76, height: 40 });
-  assert.throws(() => duckiesDesktop.listeners.get('lifeos:duckies-resize')({ sender: {}, senderFrame: {} }, { height: 40, width: 76 }), /Untrusted frame/);
+  assert.deepEqual(JSON.parse(JSON.stringify(notch.shape)), [{ x: 220, y: 0, width: 160, height: 36 }]);
+  duckiesDesktop.listeners.get('lifeos:duckies-shape')(notchEvent, { x: 200, y: 0, width: 200, height: 60 });
+  assert.deepEqual(JSON.parse(JSON.stringify(notch.shape)), [{ x: 200, y: 0, width: 200, height: 60 }]);
+  assert.throws(() => duckiesDesktop.listeners.get('lifeos:duckies-shape')({ sender: {}, senderFrame: {} }, { x: 0, y: 0, width: 10, height: 10 }), /Untrusted frame/);
+  assert.throws(() => duckiesDesktop.listeners.get('lifeos:duckies-shape')(notchEvent, { x: 0, y: 0, width: 900, height: 10 }), /Invalid Duckies shape/);
+  assert.throws(() => duckiesDesktop.listeners.get('lifeos:duckies-shape')(notchEvent, { x: 1.5, y: 0, width: 10, height: 10 }), /Invalid Duckies shape/);
   assert.throws(() => duckiesDesktop.handlers.get('lifeos:duckies-set-settings')(duckiesEvent, { enabled: 'yes' }), /Invalid Duckies settings/);
   assert.throws(() => duckiesDesktop.handlers.get('lifeos:duckies-set-settings')({ sender: {}, senderFrame: {} }, { enabled: false, notifications: false, sound: false }), /Untrusted frame/);
   assert.throws(() => duckiesDesktop.listeners.get('lifeos:duckies-resize')(notchEvent, { height: 10, width: 640 }), /Invalid Duckies bounds/);
