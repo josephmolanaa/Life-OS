@@ -11,27 +11,32 @@ type Toast = { id: number; title: string; body: string; tone: 'green' | 'blue' |
 
 const focusSeconds = 25 * 60;
 const waterGoal = 2000;
-// Island geometry; the Electron window is resized to match each state.
-const sizes = { compact: [200, 36], toast: [380, 64], expanded: [560, 230] } as const;
 
+// Two-note glass chime: soft attack, long exponential tail, octave partial, low-pass for warmth.
 function chime(tone: Toast['tone']) {
   try {
     const context = new AudioContext();
-    const notes = tone === 'green' ? [660, 880] : tone === 'blue' ? [520, 780] : [440, 330];
+    const notes = tone === 'green' ? [587.33, 880] : tone === 'blue' ? [523.25, 783.99] : [659.25, 987.77];
+    const filter = context.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 3200;
+    filter.connect(context.destination);
     notes.forEach((frequency, index) => {
-      const oscillator = context.createOscillator();
-      const gain = context.createGain();
-      const start = context.currentTime + index * 0.14;
-      oscillator.type = 'sine';
-      oscillator.frequency.value = frequency;
-      gain.gain.setValueAtTime(0.0001, start);
-      gain.gain.exponentialRampToValueAtTime(0.18, start + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.32);
-      oscillator.connect(gain).connect(context.destination);
-      oscillator.start(start);
-      oscillator.stop(start + 0.34);
+      const start = context.currentTime + 0.02 + index * 0.11;
+      [[frequency, 0.16], [frequency * 2, 0.04]].forEach(([hz, level]) => {
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        oscillator.type = 'sine';
+        oscillator.frequency.value = hz;
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime(level, start + 0.006);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.7);
+        oscillator.connect(gain).connect(filter);
+        oscillator.start(start);
+        oscillator.stop(start + 0.72);
+      });
     });
-    window.setTimeout(() => void context.close(), 900);
+    window.setTimeout(() => void context.close(), 1200);
   } catch { /* Audio is optional. */ }
 }
 
@@ -85,7 +90,6 @@ export default function DuckiesPage() {
   }, [running, notify, id]);
 
   const mode = expanded ? 'expanded' : toast ? 'toast' : 'compact';
-  useEffect(() => { const [width, height] = sizes[mode]; window.lifeOsDuckies?.resize(height, width); }, [mode]);
 
   const format = (value: number) => `${Math.floor(value / 60).toString().padStart(2, '0')}:${(value % 60).toString().padStart(2, '0')}`;
   const progress = 1 - seconds / focusSeconds;
@@ -101,19 +105,19 @@ export default function DuckiesPage() {
     ['quests', id ? 'Quest' : 'Quests', CheckSquare], ['timer', id ? 'Fokus' : 'Focus', Clock], ['water', id ? 'Air' : 'Water', Droplets], ['pet', 'Pet', Cat], ['shelf', 'Shelf', FolderDown],
   ];
 
-  return <main className={`island ${mode}`} onMouseEnter={() => setExpanded(true)} onMouseLeave={() => setExpanded(false)}>
-    {mode === 'compact' && <button type="button" className="islandCompact" onClick={() => setExpanded(true)} aria-label={id ? 'Buka Duckies' : 'Open Duckies'}>
+  return <main className={`island ${mode}`} onMouseEnter={() => { window.lifeOsDuckies?.setInteractive?.(true); setExpanded(true); }} onMouseLeave={() => { window.lifeOsDuckies?.setInteractive?.(false); setExpanded(false); }}>
+    {mode === 'compact' && <button type="button" className="islandLayer islandCompact" onClick={() => setExpanded(true)} aria-label={id ? 'Buka Duckies' : 'Open Duckies'}>
       <span className={`islandRing ${running ? 'live' : ''}`} style={{ ['--p' as string]: progress }} aria-hidden="true" />
       <span className="islandTime">{running || seconds < focusSeconds ? format(seconds) : `${done}/${quests.todos.length}`}</span>
       <span className="islandMeta"><Droplets size={11} aria-hidden="true" />{(water / 1000).toFixed(1)}L</span>
     </button>}
 
-    {mode === 'toast' && toast && <div key={toast.id} className={`islandToast ${toast.tone}`} role="status" aria-live="polite">
+    {mode === 'toast' && toast && <div key={toast.id} className={`islandLayer islandToast ${toast.tone}`} role="status" aria-live="polite">
       <span className="islandToastIcon"><Bell size={15} aria-hidden="true" /></span>
       <div><b>{toast.title}</b><small>{toast.body}</small></div>
     </div>}
 
-    {mode === 'expanded' && <section className="islandPanel" aria-label="Duckies">
+    {mode === 'expanded' && <section className="islandLayer islandPanel" aria-label="Duckies">
       <header>
         <strong>Duckies</strong>
         <nav aria-label={id ? 'Tab Duckies' : 'Duckies tabs'}>{tabs.map(([value, label, Icon]) => <button key={value} type="button" title={label} aria-label={label} aria-pressed={tab === value} className={tab === value ? 'active' : ''} onClick={() => setTab(value)}><Icon size={14} aria-hidden="true" /></button>)}</nav>

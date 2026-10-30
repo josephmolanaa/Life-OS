@@ -36,5 +36,5 @@ export function DuckiesSettings({ lang }: { lang: 'id' | 'en' }) {
 }
 
 declare global {
-  interface Window { lifeOsDuckies?: { getSettings: () => Promise<Settings>; setSettings: (settings: Settings) => Promise<Settings>; resize: (height: number, width: number) => void; onSettings?: (listener: (settings: Settings) => void) => () => void } }
+  interface Window { lifeOsDuckies?: { getSettings: () => Promise<Settings>; setSettings: (settings: Settings) => Promise<Settings>; resize: (height: number, width: number) => void; setInteractive?: (interactive: boolean) => void; onSettings?: (listener: (settings: Settings) => void) => () => void } }
 }

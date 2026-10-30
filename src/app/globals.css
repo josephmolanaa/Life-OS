@@ -1,58 +1,69 @@
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap');
 
-/* Duckies: Dynamic Island overlay. Window is sized to the island, so the pill fills it. */
-.duckiesRoute { height: 100vh; background: transparent; color: #f5f5f7; display: flex; justify-content: center; align-items: flex-start; }
-html:has(.duckiesRoute), body:has(.duckiesRoute) { overflow: hidden; scrollbar-width: none; }
+/* Duckies: Dynamic Island. The window is a fixed transparent canvas; only the pill morphs (no OS resize = no stutter). */
+.duckiesRoute { --spring: linear(0, 0.024, 0.074, 0.142, 0.223, 0.309, 0.397, 0.483, 0.564, 0.64, 0.709, 0.771, 0.824, 0.87, 0.909, 0.941, 0.967, 0.988, 1.004, 1.015, 1.024, 1.029, 1.032, 1.033, 1.033, 1.032, 1.03, 1.028, 1.025, 1.022, 1.019, 1.016, 1.013, 1.011, 1.009, 1.007, 1.005, 1.004, 1.003, 1.002, 1); height: 100vh; background: transparent; display: flex; justify-content: center; align-items: flex-start; padding-top: 8px; }
+html:has(.duckiesRoute), body:has(.duckiesRoute) { overflow: hidden; scrollbar-width: none; background: transparent !important; }
 body:has(.duckiesRoute) .floatingAiButton, body:has(.duckiesRoute) .floatingAiPanel { display: none !important; }
-.island { --ink: #000; --mute: #8e8e93; width: 100%; height: 100vh; background: var(--ink); color: #f5f5f7; border-radius: 999px; overflow: hidden; font-family: 'JetBrains Mono', monospace; transition: border-radius .42s cubic-bezier(.32,.72,0,1); user-select: none; }
-.island.toast { border-radius: 32px; }
-.island.expanded { border-radius: 34px; }
+.island { --mute: #98989d; position: relative; flex: none; width: 200px; height: 36px; background: #000; color: #fff; border-radius: 18px; overflow: hidden; font-family: system-ui, -apple-system, 'SF Pro Text', 'Segoe UI Variable Text', 'Segoe UI', sans-serif; font-feature-settings: 'tnum'; -webkit-font-smoothing: antialiased; box-shadow: 0 0 0 .5px rgba(255,255,255,.1), 0 8px 24px -6px rgba(0,0,0,.55); transition: width .6s var(--spring), height .6s var(--spring), border-radius .6s var(--spring), box-shadow .4s ease, scale .3s ease; user-select: none; will-change: width, height; }
+.island.compact:hover { scale: 1.04; }
+.island.toast { width: 380px; height: 64px; border-radius: 32px; }
+.island.expanded { width: 560px; height: 230px; border-radius: 42px; box-shadow: 0 0 0 .5px rgba(255,255,255,.12), 0 18px 48px -10px rgba(0,0,0,.7); }
 .island button { font: inherit; color: inherit; }
-.islandCompact { width: 100%; height: 100%; display: flex; align-items: center; gap: 9px; padding: 0 14px 0 10px; border: 0; background: transparent; cursor: pointer; font-size: 12px; }
-.islandRing { --p: 0; width: 16px; height: 16px; flex: 0 0 16px; border-radius: 50%; background: conic-gradient(#30d158 calc(var(--p) * 360deg), rgba(255,255,255,.16) 0); -webkit-mask: radial-gradient(circle, transparent 4.5px, #000 5px); mask: radial-gradient(circle, transparent 4.5px, #000 5px); }
-.islandRing.live { animation: islandPulse 2s ease-in-out infinite; }
-.islandTime { font-weight: 700; letter-spacing: .3px; font-variant-numeric: tabular-nums; }
-.islandMeta { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; color: #64d2ff; font-weight: 600; }
-.islandToast { height: 100%; display: flex; align-items: center; gap: 12px; padding: 0 18px 0 12px; animation: islandIn .38s cubic-bezier(.32,.72,0,1); }
-.islandToast div { display: grid; min-width: 0; }
-.islandToast b { font-size: 13px; }
-.islandToast small { color: var(--mute); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.islandToastIcon { width: 38px; height: 38px; flex: 0 0 38px; display: grid; place-items: center; border-radius: 50%; background: #30d158; color: #000; }
+.islandLayer { position: absolute; top: 0; left: 50%; translate: -50% 0; animation: islandIn .42s cubic-bezier(.2,.8,.2,1) .06s both; }
+.islandCompact { width: 200px; height: 36px; display: flex; align-items: center; gap: 8px; padding: 0 14px 0 9px; border: 0; background: transparent; cursor: pointer; font-size: 12.5px; }
+.islandRing { --p: 0; width: 18px; height: 18px; flex: 0 0 18px; border-radius: 50%; background: conic-gradient(#30d158 calc(var(--p) * 360deg), rgba(255,255,255,.18) 0); -webkit-mask: radial-gradient(circle, transparent 5.5px, #000 6px); mask: radial-gradient(circle, transparent 5.5px, #000 6px); }
+.islandRing.live { animation: islandGlow 2.4s ease-in-out infinite; }
+.islandTime { font-weight: 600; letter-spacing: -.01em; }
+.islandMeta { margin-left: auto; display: inline-flex; align-items: center; gap: 3px; color: #64d2ff; font-weight: 600; }
+.islandToast { width: 380px; height: 64px; display: flex; align-items: center; gap: 12px; padding: 0 22px 0 13px; }
+.islandToast div { display: grid; gap: 1px; min-width: 0; }
+.islandToast b { font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
+.islandToast small { color: var(--mute); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.islandToastIcon { width: 38px; height: 38px; flex: 0 0 38px; display: grid; place-items: center; border-radius: 50%; background: #30d158; color: #000; animation: islandPop .5s var(--spring) .12s both; }
 .islandToast.blue .islandToastIcon { background: #64d2ff; }
 .islandToast.amber .islandToastIcon { background: #ffd60a; }
-.islandPanel { height: 100%; display: flex; flex-direction: column; padding: 14px 18px 16px; animation: islandIn .38s cubic-bezier(.32,.72,0,1); }
+.islandPanel { width: 560px; height: 230px; display: flex; flex-direction: column; padding: 16px 22px 18px; }
 .islandPanel header { display: flex; align-items: center; gap: 12px; }
-.islandPanel header strong { font-size: 13px; letter-spacing: .2px; }
-.islandPanel nav { display: flex; gap: 2px; margin: 0 auto; padding: 3px; border-radius: 999px; background: rgba(255,255,255,.08); }
-.islandPanel nav button { width: 32px; height: 26px; display: grid; place-items: center; border: 0; border-radius: 999px; background: transparent; color: var(--mute); cursor: pointer; transition: background .2s, color .2s; }
-.islandPanel nav button:hover { color: #f5f5f7; }
-.islandPanel nav button.active { background: rgba(255,255,255,.18); color: #f5f5f7; }
+.islandPanel header strong { font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
+.islandPanel nav { display: flex; gap: 2px; margin: 0 auto; padding: 3px; border-radius: 999px; background: rgba(118,118,128,.24); }
+.islandPanel nav button { width: 34px; height: 26px; display: grid; place-items: center; border: 0; border-radius: 999px; background: transparent; color: var(--mute); cursor: pointer; transition: background .25s ease, color .25s ease, scale .2s ease; }
+.islandPanel nav button:hover { color: #fff; }
+.islandPanel nav button:active { scale: .92; }
+.islandPanel nav button.active { background: rgba(255,255,255,.22); color: #fff; }
 .island button:focus-visible { outline: 2px solid #64d2ff; outline-offset: 2px; }
 .islandFlags { display: inline-flex; gap: 6px; color: #48484a; }
 .islandFlags .on { color: #30d158; }
-.islandBody { flex: 1; min-height: 0; margin-top: 12px; overflow: auto; font-size: 12px; }
-.islandMuted { margin: 0 0 8px; color: var(--mute); }
-.islandQuests label { display: flex; align-items: center; gap: 10px; padding: 7px 10px; margin-bottom: 4px; border-radius: 12px; background: rgba(255,255,255,.07); color: #f5f5f7; font-size: 12px; cursor: pointer; }
+.islandBody { flex: 1; min-height: 0; margin-top: 14px; overflow: auto; scrollbar-width: none; font-size: 13px; }
+.islandBody > * { animation: islandIn .32s cubic-bezier(.2,.8,.2,1) both; }
+.islandMuted { margin: 0 0 8px; color: var(--mute); font-size: 12px; }
+.islandQuests label { display: flex; align-items: center; gap: 10px; padding: 8px 12px; margin-bottom: 5px; border-radius: 14px; background: rgba(255,255,255,.07); cursor: pointer; transition: background .2s; }
+.islandQuests label:hover { background: rgba(255,255,255,.11); }
 .islandQuests label.done span { color: var(--mute); text-decoration: line-through; }
-.islandQuests input { width: 16px; height: 16px; margin: 0; accent-color: #30d158; }
+.islandQuests input { appearance: none; width: 18px; height: 18px; flex: 0 0 18px; margin: 0; border-radius: 50%; border: 1.5px solid #636366; display: grid; place-items: center; transition: background .25s, border-color .25s; cursor: pointer; }
+.islandQuests input:checked { background: #30d158; border-color: #30d158; }
+.islandQuests input:checked::after { content: ''; width: 5px; height: 9px; margin-top: -2px; border: solid #000; border-width: 0 2px 2px 0; rotate: 45deg; }
 .islandQuests span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .islandCenter { height: 100%; display: grid; place-items: center; align-content: center; gap: 12px; }
-.islandDial { --p: 0; width: 92px; height: 92px; display: grid; place-items: center; border-radius: 50%; background: radial-gradient(circle, #000 60%, transparent 61%), conic-gradient(#30d158 calc(var(--p) * 360deg), rgba(255,255,255,.12) 0); }
-.islandDial strong { font-size: 20px; font-variant-numeric: tabular-nums; }
+.islandDial { --p: 0; width: 96px; height: 96px; display: grid; place-items: center; border-radius: 50%; background: radial-gradient(circle, #000 61%, transparent 62%), conic-gradient(#30d158 calc(var(--p) * 360deg), rgba(255,255,255,.12) 0); }
+.islandDial strong { font-size: 22px; font-weight: 600; letter-spacing: -.02em; }
+.islandCenter > strong { font-size: 15px; font-weight: 600; }
 .islandActions { display: flex; gap: 8px; }
-.islandActions button { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border: 0; border-radius: 999px; background: rgba(255,255,255,.12); cursor: pointer; font-size: 12px; font-weight: 600; }
+.islandActions button { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border: 0; border-radius: 999px; background: rgba(118,118,128,.28); cursor: pointer; font-size: 13px; font-weight: 600; transition: scale .15s ease, filter .2s; }
+.islandActions button:hover { filter: brightness(1.15); }
+.islandActions button:active { scale: .94; }
 .islandActions button.primary { background: #30d158; color: #000; }
 .islandActions button.primary.blue { background: #64d2ff; }
-.islandWater { width: 260px; height: 10px; border-radius: 999px; background: rgba(255,255,255,.12); overflow: hidden; }
-.islandWater i { display: block; height: 100%; border-radius: inherit; background: #64d2ff; transition: width .4s cubic-bezier(.32,.72,0,1); }
-.islandPet { height: 100%; display: flex; align-items: center; gap: 14px; padding: 0 12px; }
-.islandPet > span { font-size: 40px; animation: islandBob 2.4s ease-in-out infinite; }
+.islandWater { width: 280px; height: 10px; border-radius: 999px; background: rgba(255,255,255,.12); overflow: hidden; }
+.islandWater i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #0a84ff, #64d2ff); transition: width .6s var(--spring); }
+.islandPet { height: 100%; display: flex; align-items: center; gap: 16px; padding: 0 12px; }
+.islandPet > span { font-size: 44px; animation: islandBob 2.4s ease-in-out infinite; }
 .islandPet b { color: #ffd60a; }
 .islandPet p { margin: 4px 0 0; color: var(--mute); }
-.islandShelf { height: 100%; display: grid; place-items: center; align-content: center; gap: 8px; border: 1.5px dashed #3a3a3c; border-radius: 18px; color: var(--mute); text-align: center; }
-@keyframes islandIn { from { opacity: 0; transform: scale(.96); filter: blur(4px); } to { opacity: 1; transform: none; filter: none; } }
-@keyframes islandPulse { 50% { opacity: .55; } }
-@keyframes islandBob { 50% { transform: translateY(-3px); } }
+.islandShelf { height: 100%; display: grid; place-items: center; align-content: center; gap: 8px; border: 1.5px dashed #3a3a3c; border-radius: 22px; color: var(--mute); text-align: center; }
+@keyframes islandIn { from { opacity: 0; filter: blur(6px); scale: .94; } to { opacity: 1; filter: none; scale: 1; } }
+@keyframes islandPop { from { scale: .4; opacity: 0; } to { scale: 1; opacity: 1; } }
+@keyframes islandGlow { 50% { filter: drop-shadow(0 0 4px #30d158); } }
+@keyframes islandBob { 50% { translate: 0 -3px; } }
 @media (prefers-reduced-motion: reduce) { .island, .island * { animation: none !important; transition: none !important; } }
 .duckiesSettings { display: grid; gap: 14px; }.duckiesToggle { display: flex; grid-template-columns: auto 1fr; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border2); }.duckiesToggle:last-child { border-bottom: 0; }.duckiesToggle input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--green); }.duckiesToggle span { display: grid; gap: 2px; }.duckiesToggle small { color: var(--text2); }
 
@@ -232,7 +243,7 @@ html.dark-mode .walletPickerSheet {
 
 
 /* Topbar preferences */
-html, body, body * { font-family: 'JetBrains Mono', monospace; }
+html, body, body *:not(.island, .island *) { font-family: 'JetBrains Mono', monospace; }
 .chromeControls { gap: 10px; }
 .themeSwitch, .languageControl { min-height: 34px; border: 0; background: transparent; color: var(--text); cursor: pointer; display: inline-flex; align-items: center; gap: 7px; padding: 0; font-size: 12px; font-weight: 700; line-height: 1; }
 .themeSwitchTrack { width: 76px; height: 38px; padding: 4px; border-radius: 999px; display: flex; align-items: center; background: #f8f8f8; box-shadow: inset 0 0 0 1px rgba(18,18,18,.08); transition: background .22s ease; }

@@ -99,6 +99,7 @@ ipcMain.handle('lifeos:duckies-set-settings', (event, input) => {
   return next;
 });
 ipcMain.on('lifeos:duckies-resize', (event, bounds) => { assertDuckiesWindow(event); resizeDuckies(bounds?.height, bounds?.width); });
+ipcMain.on('lifeos:duckies-interactive', (event, interactive) => { assertDuckiesWindow(event); duckiesWindow?.setIgnoreMouseEvents(!interactive, { forward: !interactive }); });
 
 function closeDuckiesWindow() {
   if (duckiesWindow && !duckiesWindow.isDestroyed()) duckiesWindow.close();
@@ -113,10 +114,12 @@ function resizeDuckies(height, width) {
 function createDuckiesWindow() {
   if (!app.isPackaged || !readDuckiesSettings().enabled || (duckiesWindow && !duckiesWindow.isDestroyed())) return;
   const { screen } = require('electron');
-  const width = 200;
-  const height = 36;
+  const width = 580;
+  const height = 250;
   const screenWidth = screen.getPrimaryDisplay().workAreaSize.width;
   duckiesWindow = new BrowserWindow({ width, height, x: Math.round((screenWidth - width) / 2), y: 8, frame: false, transparent: true, alwaysOnTop: true, skipTaskbar: true, resizable: false, movable: false, focusable: true, hasShadow: false, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false } });
+  // Fixed transparent canvas: the pill morphs in CSS; empty space passes clicks through to the desktop.
+  duckiesWindow.setIgnoreMouseEvents(true, { forward: true });
   duckiesWindow.setAlwaysOnTop(true, 'floating');
   duckiesWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   duckiesWindow.on('closed', () => { duckiesWindow = undefined; });
