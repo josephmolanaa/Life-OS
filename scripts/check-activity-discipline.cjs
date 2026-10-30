@@ -30,6 +30,11 @@ const { GET } = load('src/app/api/activitywatch-data/route.ts', {
   'next/server': { NextResponse: { json: (value, options = {}) => ({ value, status: options.status ?? 200 }) } },
   '@/lib/supabase/server': { createClient: async () => client },
   '@/lib/activitywatch-rules': { applyActivityRules: items => items },
+  '@/lib/activitywatch-permissions': {
+    isDesktopActivity: () => false,
+    trustedActivityRequest: () => false,
+    hasActivityPermission: () => false,
+  },
   '@/lib/activitywatch-cache': {
     saveActivityEventsToCache: async () => {},
     fetchActivityFromCache: async (_, id) => {

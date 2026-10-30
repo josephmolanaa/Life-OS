@@ -11,6 +11,12 @@ contextBridge.exposeInMainWorld('lifeOsActivity', {
   data: (date, range) => ipcRenderer.invoke('lifeos:activity-data', { date, range }),
 });
 
+contextBridge.exposeInMainWorld('lifeOsDuckies', {
+  getSettings: () => ipcRenderer.invoke('lifeos:duckies-settings'),
+  setSettings: settings => ipcRenderer.invoke('lifeos:duckies-set-settings', settings),
+  resize: (height, width) => ipcRenderer.send('lifeos:duckies-resize', { height, width }),
+});
+
 contextBridge.exposeInMainWorld('lifeOsUpdater', {
   getVersion: () => ipcRenderer.invoke('lifeos:get-version'),
   getStatus: () => ipcRenderer.invoke('lifeos:update-status'),

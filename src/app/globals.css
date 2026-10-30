@@ -1,5 +1,12 @@
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap');
 
+.duckiesRoute { min-height: 100vh; background: transparent; color: #fff; }
+.duckiesWidget { width: 240px; margin: 0 auto; color: #fff; font-family: 'JetBrains Mono', monospace; }
+.duckiesWidget.expanded { width: 640px; }
+.duckiesCompact { width: 100%; height: 38px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 14px; border: 1px solid rgba(255,255,255,.12); border-top: 0; border-radius: 0 0 16px 16px; background: rgba(10,10,10,.94); color: #fff; cursor: pointer; font-size: 11px; }
+.duckiesCompact b { color: #34d399; }.duckiesPanel { height: 190px; padding: 9px 12px; border: 1px solid rgba(255,255,255,.14); border-top: 0; border-radius: 0 0 18px 18px; background: rgba(10,10,10,.96); box-shadow: 0 18px 44px rgba(0,0,0,.35); }
+.duckiesPanel header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 7px; border-bottom: 1px solid rgba(255,255,255,.12); font-size: 11px; }.duckiesPanel nav { display: flex; gap: 3px; }.duckiesTab { width: 28px; height: 26px; display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: #a1a1aa; cursor: pointer; }.duckiesTab:hover,.duckiesTab.active { background: rgba(255,255,255,.14); color: #fff; }.duckiesContent { height: 148px; padding: 10px 2px 0; overflow: auto; font-size: 11px; }.duckiesMuted { margin: 0 0 8px; color: #a1a1aa; }.duckiesQuest { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 8px; margin-bottom: 4px; border-radius: 6px; background: rgba(255,255,255,.06); }.duckiesQuest span { min-width: 0; overflow-wrap: anywhere; }.duckiesCenter { height: 100%; display: grid; place-items: center; align-content: center; gap: 10px; }.duckiesTimer { font-size: 28px; letter-spacing: 1px; }.duckiesAction { border: 0; border-radius: 6px; padding: 7px 12px; margin: 0 3px; background: #059669; color: #fff; cursor: pointer; font-size: 11px; }.duckiesAction.secondary { background: #3f3f46; }.duckiesPet { display: flex; align-items: center; gap: 12px; height: 100%; padding: 0 22px; }.duckiesPet > span { font-size: 32px; }.duckiesPet b { color: #a5b4fc; }.duckiesPet p { margin: 4px 0 0; color: #a1a1aa; }.duckiesShelf { height: 100%; display: grid; place-items: center; align-content: center; gap: 7px; border: 1px dashed #52525b; border-radius: 8px; color: #a1a1aa; text-align: center; }.duckiesSettings { display: grid; gap: 14px; }.duckiesToggle { display: flex; grid-template-columns: auto 1fr; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border2); }.duckiesToggle:last-child { border-bottom: 0; }.duckiesToggle input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--green); }.duckiesToggle span { display: grid; gap: 2px; }.duckiesToggle small { color: var(--text2); }
+
 
 @tailwind base;
 @tailwind components;
@@ -587,20 +594,21 @@ select.category-select option { white-space: nowrap; overflow-wrap: normal; }
   select:not([multiple]):not([size]) { appearance: auto; background-image: none; }
 }
 
-/* GitHub contribution calendar: square cells sized to fill the card width (12–22px), app's own green scale. */
+/* Contribution calendar: fluid square cells with proportional spacing, app's own green scale. */
 .consistencyCard{--gap:4px;--lvl0:var(--surface2);--lvl1:rgba(76,175,80,.28);--lvl2:rgba(76,175,80,.48);--lvl3:rgba(76,175,80,.7);--lvl4:var(--green);--cellBorder:var(--border2);padding:16px 20px}
 .consistencyHeader{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:8px}
 .consistencyHeader h2{margin:0;font-size:14px;font-weight:400;color:var(--text);letter-spacing:0}
 .consistencyToday{flex:0 0 auto;color:var(--text2);font-size:12px;font-weight:400}
-.consistencyScroll{container-type:inline-size;overflow-x:auto;overflow-y:hidden;padding:4px 0 2px;scrollbar-width:thin}
-/* 36px = day-label column + column gap; 52 gaps between 53 weeks. Below 12px the card scrolls instead. */
-.consistencyCalendar{--cell:clamp(12px,calc((100cqw - 36px - 52 * var(--gap)) / 53),22px);display:grid;grid-template-columns:30px auto;grid-template-rows:16px auto;column-gap:6px;row-gap:6px;width:max-content;margin:0 auto}
+.consistencyScroll{container-type:inline-size;overflow:hidden;padding:4px 0 2px}
+/* 53 cells + 52 quarter-cell gaps = 66 cells; keep density constant at every width. */
+.consistencyCalendar{--cell:calc((100cqw - 36px) / 66);--gap:calc(var(--cell) / 4);display:grid;grid-template-columns:30px minmax(0,1fr);grid-template-rows:16px auto;column-gap:6px;row-gap:6px;width:100%;margin:0}
 .consistencyLegend{--cell:12px}
 .consistencyMonths{grid-column:2;display:grid;grid-template-columns:repeat(53,var(--cell));column-gap:var(--gap);height:16px;color:var(--text2);font-size:11px;line-height:16px}
 .consistencyMonths span{grid-row:1;white-space:nowrap;overflow:visible}
 .consistencyDayLabels{grid-column:1;grid-row:2;display:grid;grid-template-rows:repeat(7,var(--cell));row-gap:var(--gap);color:var(--text2);font-size:10px;line-height:var(--cell)}
 .consistencyCells{grid-column:2;grid-row:2;display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,var(--cell));grid-auto-columns:var(--cell);gap:var(--gap)}
 .consistencyCells span,.consistencyLegend span{display:block;width:var(--cell);height:var(--cell);border-radius:3px;outline:1px solid var(--cellBorder);outline-offset:-1px;background:var(--lvl0)}
+.consistencyCells span{border-radius:calc(var(--cell) / 5)}
 .consistencyCells span.isFuture{visibility:hidden}
 .consistencyCells span:hover{outline:1px solid var(--text);z-index:2}
 .consistencyCard [data-level="1"]{background:var(--lvl1)}.consistencyCard [data-level="2"]{background:var(--lvl2)}.consistencyCard [data-level="3"]{background:var(--lvl3)}.consistencyCard [data-level="4"]{background:var(--lvl4)}

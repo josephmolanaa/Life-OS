@@ -4,6 +4,7 @@ import { ChromeControls } from '@/components/finance/chrome-controls';
 import { Shell } from '@/components/finance/layout';
 import { AiProviderSettings } from '@/components/ai-settings';
 import { AppInfoSettings } from '@/components/app-info-settings';
+import { DuckiesSettings } from '@/components/duckies-settings';
 import { getLang } from '@/lib/i18n';
 
 export default async function SettingsPage() {
@@ -28,6 +29,7 @@ export default async function SettingsPage() {
         <Link className="settingsLink" href="/account"><UserRound size={19} aria-hidden="true" /><span>{id ? 'Akun' : 'Account'}</span></Link>
         <Link className="settingsLink" href="/finance/settings"><WalletCards size={19} aria-hidden="true" /><span>{id ? 'Pengaturan keuangan' : 'Finance settings'}</span></Link>
       </section>
+      <DuckiesSettings lang={id ? 'id' : 'en'} />
       <AppInfoSettings lang={id ? 'id' : 'en'} />
       <AiProviderSettings lang={id ? 'id' : 'en'} />
     </div>

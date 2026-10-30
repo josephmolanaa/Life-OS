@@ -47,12 +47,80 @@ ipcMain.handle('lifeos:activity-set', (event, allowed) => activityRequest(event,
 ipcMain.handle('lifeos:activity-data', (event, input) => activityRequest(event, 'data', input));
 
 let mainWindow;
+let duckiesWindow;
 let serverProcess;
 let autoUpdater;
 let tray;
 let quitting = false;
 let initialized = false;
 let startHidden = process.argv.includes('--hidden');
+let duckiesSettings;
+const duckiesSettingsPath = () => path.join(app.getPath('userData'), 'duckies-settings.json');
+const defaultDuckiesSettings = { enabled: false, notifications: false, sound: false };
+function readDuckiesSettings() {
+  if (duckiesSettings) return duckiesSettings;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(duckiesSettingsPath(), 'utf8'));
+    duckiesSettings = { ...defaultDuckiesSettings, ...parsed };
+  } catch { duckiesSettings = { ...defaultDuckiesSettings }; }
+  return duckiesSettings;
+}
+function writeDuckiesSettings(next) {
+  duckiesSettings = { ...defaultDuckiesSettings, ...next };
+  fs.mkdirSync(app.getPath('userData'), { recursive: true });
+  fs.writeFileSync(duckiesSettingsPath(), JSON.stringify(duckiesSettings), { mode: 0o600 });
+  return duckiesSettings;
+}
+function assertDuckiesRenderer(event) {
+  if (![mainWindow?.webContents, duckiesWindow?.webContents].includes(event.sender) || event.senderFrame !== event.sender.mainFrame) throw new Error('Untrusted frame');
+  const origin = new URL(event.senderFrame.url).origin;
+  if (origin !== `http://127.0.0.1:${port}` && origin !== `http://localhost:${port}`) throw new Error('Untrusted window');
+}
+function assertDuckiesWindow(event) {
+  if (event.sender !== duckiesWindow?.webContents || event.senderFrame !== event.sender.mainFrame) throw new Error('Untrusted frame');
+  assertDuckiesRenderer(event);
+}
+
+function assertSettingsRenderer(event) {
+  assertDuckiesRenderer(event);
+}
+
+function openDuckiesIfEnabled() {
+  if (readDuckiesSettings().enabled) createDuckiesWindow();
+}
+
+ipcMain.handle('lifeos:duckies-settings', event => { assertSettingsRenderer(event); return readDuckiesSettings(); });
+ipcMain.handle('lifeos:duckies-set-settings', (event, input) => {
+  assertSettingsRenderer(event);
+  if (!input || typeof input !== 'object' || typeof input.enabled !== 'boolean' || typeof input.notifications !== 'boolean' || typeof input.sound !== 'boolean') throw new Error('Invalid Duckies settings');
+  const next = writeDuckiesSettings(input);
+  if (next.enabled) createDuckiesWindow(); else closeDuckiesWindow();
+  return next;
+});
+ipcMain.on('lifeos:duckies-resize', (event, bounds) => { assertDuckiesWindow(event); resizeDuckies(bounds?.height, bounds?.width); });
+
+function closeDuckiesWindow() {
+  if (duckiesWindow && !duckiesWindow.isDestroyed()) duckiesWindow.close();
+  duckiesWindow = undefined;
+}
+function resizeDuckies(height, width) {
+  if (!duckiesWindow || duckiesWindow.isDestroyed()) return;
+  if (!Number.isInteger(height) || !Number.isInteger(width) || height < 38 || height > 480 || width < 220 || width > 900) throw new Error('Invalid Duckies bounds');
+  const { width: screenWidth } = require('electron').screen.getPrimaryDisplay().workAreaSize;
+  duckiesWindow.setBounds({ x: Math.round((screenWidth - width) / 2), y: 0, width, height });
+}
+function createDuckiesWindow() {
+  if (!app.isPackaged || !readDuckiesSettings().enabled || (duckiesWindow && !duckiesWindow.isDestroyed())) return;
+  const { screen } = require('electron');
+  const width = 240;
+  const height = 38;
+  const screenWidth = screen.getPrimaryDisplay().workAreaSize.width;
+  duckiesWindow = new BrowserWindow({ width, height, x: Math.round((screenWidth - width) / 2), y: 0, frame: false, transparent: true, alwaysOnTop: true, skipTaskbar: true, resizable: false, movable: false, focusable: true, hasShadow: false, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false } });
+  duckiesWindow.setAlwaysOnTop(true, 'floating');
+  duckiesWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  duckiesWindow.on('closed', () => { duckiesWindow = undefined; });
+  duckiesWindow.loadURL(`http://127.0.0.1:${port}/duckies`).catch(console.error);
+}
 
 const port = Number(process.env.PORT || 63027);
 const loginItemOptions = { path: process.execPath, args: ['--hidden'] };
@@ -304,6 +372,7 @@ async function createWindow() {
     if (!startHidden) mainWindow.webContents.openDevTools();
   }
   if (!startHidden) showWindow();
+  openDuckiesIfEnabled();
 }
 
 function configureAutoUpdater() {

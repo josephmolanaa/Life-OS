@@ -66,6 +66,10 @@ function launch({ args = [], packaged = true, userData = tempDirectory('lifeos-t
     restore() { this.minimized = false; }
     isMinimized() { return this.minimized; }
     isDestroyed() { return this.destroyed; }
+    close() { this.destroyed = true; this.emit('closed'); }
+    setBounds(bounds) { this.bounds = bounds; }
+    setAlwaysOnTop() {}
+    setVisibleOnAllWorkspaces() {}
   }
   class Tray extends EventEmitter {
     constructor() { super(); if (trayFailure) throw new Error('tray unavailable'); Tray.instance = this; }
@@ -76,14 +80,21 @@ function launch({ args = [], packaged = true, userData = tempDirectory('lifeos-t
 
   const Menu = { setApplicationMenu() {}, buildFromTemplate: (template) => ({ template }) };
   const handlers = new Map();
+  const listeners = new Map();
   const messages = [];
-  const ipcMain = { handle: (channel, handler) => handlers.set(channel, handler) };
+  const ipcMain = {
+    handle: (channel, handler) => handlers.set(channel, handler),
+    on: (channel, listener) => listeners.set(channel, listener),
+  };
   class NotificationMock extends EventEmitter {
     constructor(options) { super(); this.options = options; lastNotification = this; }
     static isSupported() { return true; }
     show() {}
   }
-  const electron = { app, BrowserWindow, Tray, Menu, ipcMain, Notification: NotificationMock, dialog: { showErrorBox() {} }, safeStorage: { isEncryptionAvailable: () => true } };
+  const electron = {
+    app, BrowserWindow, Tray, Menu, ipcMain, Notification: NotificationMock, dialog: { showErrorBox() {} }, safeStorage: { isEncryptionAvailable: () => true },
+    screen: { getPrimaryDisplay: () => ({ workAreaSize: { width: 1920, height: 1080 } }) },
+  };
   const updater = new EventEmitter();
   updater.checkCalls = 0;
   updater.downloadCalls = 0;
@@ -110,7 +121,7 @@ function launch({ args = [], packaged = true, userData = tempDirectory('lifeos-t
     Buffer, URL, setTimeout, setImmediate, Date,
   }, { filename: 'electron/main.cjs' });
 
-  return { app, windows, settingsCalls, spawned, errors, updater, handlers, messages, get quits() { return quits; }, get readyCalls() { return readyCalls; }, userData, get tray() { return Tray.instance; } };
+  return { app, windows, settingsCalls, spawned, errors, updater, handlers, listeners, messages, get quits() { return quits; }, get readyCalls() { return readyCalls; }, userData, get tray() { return Tray.instance; } };
 }
 
 async function settle() { await new Promise((resolve) => setTimeout(resolve, 10)); }
@@ -246,6 +257,31 @@ async function checkUpdater() {
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'electron', 'preload.cjs'), 'utf8'), {
     require: () => ({ ipcRenderer: renderer, contextBridge: { exposeInMainWorld: (name, api) => { exposed[name] = api; } } }),
   });
+  const duckiesApi = exposed.lifeOsDuckies;
+  assert.ok(duckiesApi && typeof duckiesApi.getSettings === 'function');
+  assert.ok(typeof duckiesApi.setSettings === 'function');
+  assert.ok(typeof duckiesApi.resize === 'function');
+
+  const duckiesDesktop = launch();
+  await settle();
+  const duckiesEvent = { sender: duckiesDesktop.windows[0].webContents, senderFrame: duckiesDesktop.windows[0].webContents.mainFrame };
+  const duckiesInvoke = (channel, payload) => duckiesDesktop.handlers.get(`lifeos:${channel}`)(duckiesEvent, payload);
+  assert.deepEqual(JSON.parse(JSON.stringify(await duckiesInvoke('duckies-settings'))), { enabled: false, notifications: false, sound: false });
+  assert.equal(duckiesDesktop.windows.length, 1);
+  const updatedSettings = await duckiesInvoke('duckies-set-settings', { enabled: true, notifications: true, sound: false });
+  assert.deepEqual(JSON.parse(JSON.stringify(updatedSettings)), { enabled: true, notifications: true, sound: false });
+  assert.equal(duckiesDesktop.windows.length, 2);
+  const notch = duckiesDesktop.windows[1];
+  const notchEvent = { sender: notch.webContents, senderFrame: notch.webContents.mainFrame };
+  duckiesDesktop.listeners.get('lifeos:duckies-resize')(notchEvent, { height: 190, width: 640 });
+  assert.deepEqual(JSON.parse(JSON.stringify(notch.bounds)), { x: 640, y: 0, width: 640, height: 190 });
+  assert.throws(() => duckiesDesktop.handlers.get('lifeos:duckies-set-settings')(duckiesEvent, { enabled: 'yes' }), /Invalid Duckies settings/);
+  assert.throws(() => duckiesDesktop.handlers.get('lifeos:duckies-set-settings')({ sender: {}, senderFrame: {} }, { enabled: false, notifications: false, sound: false }), /Untrusted frame/);
+  assert.throws(() => duckiesDesktop.listeners.get('lifeos:duckies-resize')(notchEvent, { height: 10, width: 640 }), /Invalid Duckies bounds/);
+  await duckiesInvoke('duckies-set-settings', { enabled: false, notifications: false, sound: false });
+  assert.equal(notch.destroyed, true);
+  console.log('Desktop Duckies OK: settings persistence, window creation/destroy, bounds validation, sender trust.');
+
   const api = exposed.lifeOsUpdater;
   for (const method of ['getVersion', 'getStatus', 'checkForUpdates', 'downloadUpdate', 'installUpdate']) await api[method]();
   assert.deepEqual(calls, ['lifeos:get-version', 'lifeos:update-status', 'lifeos:check-for-updates', 'lifeos:download-update', 'lifeos:install-update']);

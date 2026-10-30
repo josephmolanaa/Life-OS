@@ -32,9 +32,6 @@ const dateKey = (date: Date) => [date.getFullYear(), String(date.getMonth() + 1)
 function ConsistencyGraph({ todos, lang, history = {} }: { todos: { done: boolean }[]; lang: Lang; history?: Record<string, number> }) {
   const id = lang === 'id';
   const locale = id ? 'id-ID' : 'en-US';
-  const scrollRef = useRef<HTMLDivElement>(null);
-  // Newest week sits on the right; start scrolled there on narrow screens like GitHub.
-  useEffect(() => { const el = scrollRef.current; if (el) el.scrollLeft = el.scrollWidth; }, []);
 
   const completed = todos.filter(todo => todo.done).length;
   const today = new Date();
@@ -67,7 +64,7 @@ function ConsistencyGraph({ todos, lang, history = {} }: { todos: { done: boolea
       <h2>{total} {id ? 'tugas selesai dalam setahun terakhir' : 'tasks completed in the last year'}</h2>
       <span className="consistencyToday">{id ? 'Hari ini' : 'Today'} {completed}/{todos.length}</span>
     </div>
-    <div className="consistencyScroll" ref={scrollRef}>
+    <div className="consistencyScroll">
       <div className="consistencyCalendar" role="img" aria-label={`${total} ${unit}`}>
         <div className="consistencyMonths" aria-hidden="true">{months.map(month => <span key={month.column} style={{ gridColumnStart: month.column + 1 }}>{month.label}</span>)}</div>
         <div className="consistencyDayLabels" aria-hidden="true">{dayLabels.map((label, index) => <span key={index}>{label}</span>)}</div>
@@ -266,14 +263,14 @@ export function LifeOsDashboard({ financeSummary, consistencyHistory }: LifeOsDa
   ];
 
   return <div className="lifeDashboard">
-    <div className="dashboardSplit">
-      {quests.loading ? <DashboardQuestLoading lang={lang} /> : <DailyQuestCard {...quests} lang={lang} />}
-      <EditableTodoList lang={lang} />
-    </div>
     <div className="dashboardPillars">
       {pillars.map(pillar => <DashboardCard key={pillar.title} {...pillar} linkText={id ? 'Buka' : 'Open'} />)}
     </div>
     <ConsistencyGraph todos={quests.todos} lang={lang} history={consistencyHistory} />
+    <div className="dashboardSplit">
+      {quests.loading ? <DashboardQuestLoading lang={lang} /> : <DailyQuestCard {...quests} lang={lang} />}
+      <EditableTodoList lang={lang} />
+    </div>
     <ModuleCards financeSummary={financeSummary} awStatus={awStatus} awCategories={awCategories} lang={lang} />
   </div>;
 }
