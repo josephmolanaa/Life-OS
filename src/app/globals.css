@@ -4,22 +4,34 @@
 .duckiesRoute { --spring: linear(0, 0.024, 0.074, 0.142, 0.223, 0.309, 0.397, 0.483, 0.564, 0.64, 0.709, 0.771, 0.824, 0.87, 0.909, 0.941, 0.967, 0.988, 1.004, 1.015, 1.024, 1.029, 1.032, 1.033, 1.033, 1.032, 1.03, 1.028, 1.025, 1.022, 1.019, 1.016, 1.013, 1.011, 1.009, 1.007, 1.005, 1.004, 1.003, 1.002, 1); height: 100vh; background: transparent; display: flex; justify-content: center; align-items: flex-start; padding-top: 8px; }
 html:has(.duckiesRoute), body:has(.duckiesRoute) { overflow: hidden; scrollbar-width: none; background: transparent !important; }
 body:has(.duckiesRoute) .floatingAiButton, body:has(.duckiesRoute) .floatingAiPanel { display: none !important; }
-.island { --mute: #98989d; position: relative; flex: none; width: 200px; height: 36px; background: #000; color: #fff; border-radius: 18px; overflow: hidden; font-family: system-ui, -apple-system, 'SF Pro Text', 'Segoe UI Variable Text', 'Segoe UI', sans-serif; font-feature-settings: 'tnum'; -webkit-font-smoothing: antialiased; box-shadow: 0 0 0 .5px rgba(255,255,255,.1), 0 8px 24px -6px rgba(0,0,0,.55); transition: width .6s var(--spring), height .6s var(--spring), border-radius .6s var(--spring), box-shadow .4s ease, scale .3s ease; user-select: none; will-change: width, height; }
-.island.compact:hover { scale: 1.04; }
-.island.toast { width: 380px; height: 64px; border-radius: 32px; }
-.island.expanded { width: 560px; height: 230px; border-radius: 42px; box-shadow: 0 0 0 .5px rgba(255,255,255,.12), 0 18px 48px -10px rgba(0,0,0,.7); }
+.island { --mute: #98989d; position: relative; flex: none; width: 72px; height: 36px; background: #000; color: #fff; border-radius: 18px; overflow: hidden; font-family: system-ui, -apple-system, 'SF Pro Text', 'Segoe UI Variable Text', 'Segoe UI', sans-serif; font-feature-settings: 'tnum'; -webkit-font-smoothing: antialiased; box-shadow: 0 0 0 .5px rgba(255,255,255,.1), 0 8px 24px -6px rgba(0,0,0,.55); transition: width .5s var(--spring), height .5s var(--spring), border-radius .5s var(--spring), box-shadow .35s ease, scale .25s ease; user-select: none; will-change: width, height; }
+.island.compact:hover { scale: 1.03; }
+.island.toast { border-radius: 32px; }
+.island.expanded { width: 560px !important; height: 230px !important; border-radius: 42px; box-shadow: 0 0 0 .5px rgba(255,255,255,.12), 0 18px 48px -10px rgba(0,0,0,.7); }
 .island button { font: inherit; color: inherit; }
 .islandLayer { position: absolute; top: 0; left: 50%; translate: -50% 0; animation: islandIn .42s cubic-bezier(.2,.8,.2,1) .06s both; }
-.islandCompact { width: 200px; height: 36px; display: flex; align-items: center; gap: 8px; padding: 0 14px 0 9px; border: 0; background: transparent; cursor: pointer; font-size: 12.5px; }
+.islandCompact { width: max-content; min-width: 72px; height: 36px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; border: 0; background: transparent; cursor: pointer; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.islandCompact.idle { padding: 0 6px 0 10px; cursor: default; }
+.islandExpand { display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0; border: 0; background: transparent; cursor: pointer; }
+.islandBell { width: 26px; height: 26px; display: grid; place-items: center; border: 0; border-radius: 50%; background: transparent; color: var(--mute); cursor: pointer; transition: background .25s ease, color .25s ease, scale .2s ease; }
+.islandBell:hover { background: rgba(255,255,255,.12); color: #fff; }
+.islandBell:active { scale: .88; }
+.islandBell.on { background: #5e5ce6; color: #fff; }
+.islandCompact.live { gap: 9px; padding: 0 16px 0 12px; }
+.islandGap { width: 20px; flex: 0 0 20px; }
+.islandLead { display: inline-flex; align-items: center; gap: 7px; }
+.pixelDuck { display: block; flex: none; image-rendering: pixelated; }
+.islandBrand { display: inline-flex; align-items: center; gap: 6px; }
+.islandTime.green { color: #30d158; }
 .islandRing { --p: 0; width: 18px; height: 18px; flex: 0 0 18px; border-radius: 50%; background: conic-gradient(#30d158 calc(var(--p) * 360deg), rgba(255,255,255,.18) 0); -webkit-mask: radial-gradient(circle, transparent 5.5px, #000 6px); mask: radial-gradient(circle, transparent 5.5px, #000 6px); }
 .islandRing.live { animation: islandGlow 2.4s ease-in-out infinite; }
 .islandTime { font-weight: 600; letter-spacing: -.01em; }
 .islandMeta { margin-left: auto; display: inline-flex; align-items: center; gap: 3px; color: #64d2ff; font-weight: 600; }
-.islandToast { width: 380px; height: 64px; display: flex; align-items: center; gap: 12px; padding: 0 22px 0 13px; }
+.islandToast { width: max-content; min-width: 260px; max-width: 440px; height: 64px; display: flex; align-items: center; gap: 13px; padding: 0 24px 0 14px; white-space: nowrap; }
 .islandToast div { display: grid; gap: 1px; min-width: 0; }
 .islandToast b { font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
 .islandToast small { color: var(--mute); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.islandToastIcon { width: 38px; height: 38px; flex: 0 0 38px; display: grid; place-items: center; border-radius: 50%; background: #30d158; color: #000; animation: islandPop .5s var(--spring) .12s both; }
+.islandToastIcon { width: 40px; height: 40px; flex: 0 0 40px; display: grid; place-items: center; border-radius: 50%; background: #30d158; color: #000; animation: islandPop .5s var(--spring) .12s both; }
 .islandToast.blue .islandToastIcon { background: #64d2ff; }
 .islandToast.amber .islandToastIcon { background: #ffd60a; }
 .islandPanel { width: 560px; height: 230px; display: flex; flex-direction: column; padding: 16px 22px 18px; }
@@ -31,8 +43,9 @@ body:has(.duckiesRoute) .floatingAiButton, body:has(.duckiesRoute) .floatingAiPa
 .islandPanel nav button:active { scale: .92; }
 .islandPanel nav button.active { background: rgba(255,255,255,.22); color: #fff; }
 .island button:focus-visible { outline: 2px solid #64d2ff; outline-offset: 2px; }
-.islandFlags { display: inline-flex; gap: 6px; color: #48484a; }
-.islandFlags .on { color: #30d158; }
+.islandFlags { display: inline-flex; gap: 6px; color: #48484a; align-items: center; }
+.islandFlags .on { color: #5e5ce6; }
+.islandFlags .dnd { color: #ff453a; }
 .islandBody { flex: 1; min-height: 0; margin-top: 14px; overflow: auto; scrollbar-width: none; font-size: 13px; }
 .islandBody > * { animation: islandIn .32s cubic-bezier(.2,.8,.2,1) both; }
 .islandMuted { margin: 0 0 8px; color: var(--mute); font-size: 12px; }
@@ -56,7 +69,7 @@ body:has(.duckiesRoute) .floatingAiButton, body:has(.duckiesRoute) .floatingAiPa
 .islandWater { width: 280px; height: 10px; border-radius: 999px; background: rgba(255,255,255,.12); overflow: hidden; }
 .islandWater i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #0a84ff, #64d2ff); transition: width .6s var(--spring); }
 .islandPet { height: 100%; display: flex; align-items: center; gap: 16px; padding: 0 12px; }
-.islandPet > span { font-size: 44px; animation: islandBob 2.4s ease-in-out infinite; }
+
 .islandPet b { color: #ffd60a; }
 .islandPet p { margin: 4px 0 0; color: var(--mute); }
 .islandShelf { height: 100%; display: grid; place-items: center; align-content: center; gap: 8px; border: 1.5px dashed #3a3a3c; border-radius: 22px; color: var(--mute); text-align: center; }

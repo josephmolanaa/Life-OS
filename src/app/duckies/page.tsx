@@ -1,9 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { CheckSquare, Clock, Droplets, Cat, FolderDown, Pause, Play, RotateCcw, Plus, Bell, Volume2, VolumeX } from 'lucide-react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { CheckSquare, Clock, Droplets, Cat, FolderDown, Pause, Play, RotateCcw, Plus, Bell, BellOff, Volume2, VolumeX } from 'lucide-react';
 import { useDailyQuests } from '@/components/use-daily-quests';
 import { getLang, type Lang } from '@/lib/i18n';
+import { PixelDuck } from '@/components/pixel-duck';
 
 type Tab = 'quests' | 'timer' | 'water' | 'pet' | 'shelf';
 type Settings = { enabled: boolean; notifications: boolean; sound: boolean };
@@ -50,6 +51,8 @@ export default function DuckiesPage() {
   const [fileName, setFileName] = useState('');
   const [settings, setSettings] = useState<Settings>({ enabled: true, notifications: false, sound: false });
   const [toast, setToast] = useState<Toast | null>(null);
+  const [dnd, setDnd] = useState(false);
+  const [clock, setClock] = useState('');
   const toastTimer = useRef<number | undefined>(undefined);
   const quests = useDailyQuests(lang);
   const id = lang === 'id';
@@ -66,17 +69,25 @@ export default function DuckiesPage() {
       if (Number.isInteger(saved.seconds) && saved.seconds >= 0 && saved.seconds <= 86400) setSeconds(saved.seconds);
       if (Number.isInteger(saved.water) && saved.water >= 0 && saved.water <= 10000 && saved.day === new Date().toDateString()) setWater(saved.water);
     } catch { /* Corrupt state falls back to defaults. */ }
-    return window.lifeOsDuckies?.onSettings?.(setSettings);
+    setDnd(localStorage.getItem('lifeos-duckies-dnd') === '1');
+    // Desktop clock in the system locale; a string state skips re-renders until the minute changes.
+    const tick = () => setClock(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+    tick();
+    const clockTimer = window.setInterval(tick, 5000);
+    const offSettings = window.lifeOsDuckies?.onSettings?.(setSettings);
+    return () => { window.clearInterval(clockTimer); offSettings?.(); };
   }, []);
+  const toggleDnd = () => setDnd(value => { localStorage.setItem('lifeos-duckies-dnd', value ? '0' : '1'); return !value; });
   useEffect(() => { localStorage.setItem('lifeos-duckies-state', JSON.stringify({ seconds, water, day: new Date().toDateString() })); }, [seconds, water]);
 
   const notify = useCallback((next: Omit<Toast, 'id'>) => {
+    if (dnd) return;
     if (settings.sound) chime(next.tone);
     if (!settings.notifications) return;
     window.clearTimeout(toastTimer.current);
     setToast({ ...next, id: Date.now() });
     toastTimer.current = window.setTimeout(() => setToast(null), 4200);
-  }, [settings.notifications, settings.sound]);
+  }, [dnd, settings.notifications, settings.sound]);
 
   useEffect(() => {
     if (!running) return;
@@ -90,6 +101,22 @@ export default function DuckiesPage() {
   }, [running, notify, id]);
 
   const mode = expanded ? 'expanded' : toast ? 'toast' : 'compact';
+  // Like iPhone: the island hugs whatever is showing. Measure the active layer and let CSS spring to it.
+  const layer = useRef<HTMLElement | null>(null);
+  const [fit, setFit] = useState<{ width: number; height: number } | null>(null);
+  useLayoutEffect(() => {
+    const node = layer.current;
+    if (!node || mode === 'expanded') { setFit(null); return; }
+    const measure = () => setFit({ width: Math.ceil(node.offsetWidth), height: Math.ceil(node.offsetHeight) });
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [mode, toast?.id]);
+  const timerActive = running || seconds < focusSeconds;
+  const compactKind = timerActive ? 'live' : quests.todos.length || water ? 'split' : 'idle';
+  const dndLabel = dnd ? (id ? 'Matikan Jangan Ganggu' : 'Turn off Do Not Disturb') : (id ? 'Nyalakan Jangan Ganggu' : 'Turn on Do Not Disturb');
+  const bell = <button type="button" className={`islandBell ${dnd ? 'on' : ''}`} onClick={event => { event.stopPropagation(); toggleDnd(); }} aria-pressed={dnd} aria-label={dndLabel} title={dndLabel}>{dnd ? <BellOff size={14} aria-hidden="true" /> : <Bell size={14} aria-hidden="true" />}</button>;
 
   const format = (value: number) => `${Math.floor(value / 60).toString().padStart(2, '0')}:${(value % 60).toString().padStart(2, '0')}`;
   const progress = 1 - seconds / focusSeconds;
@@ -105,24 +132,36 @@ export default function DuckiesPage() {
     ['quests', id ? 'Quest' : 'Quests', CheckSquare], ['timer', id ? 'Fokus' : 'Focus', Clock], ['water', id ? 'Air' : 'Water', Droplets], ['pet', 'Pet', Cat], ['shelf', 'Shelf', FolderDown],
   ];
 
-  return <main className={`island ${mode}`} onMouseEnter={() => { window.lifeOsDuckies?.setInteractive?.(true); setExpanded(true); }} onMouseLeave={() => { window.lifeOsDuckies?.setInteractive?.(false); setExpanded(false); }}>
-    {mode === 'compact' && <button type="button" className="islandLayer islandCompact" onClick={() => setExpanded(true)} aria-label={id ? 'Buka Duckies' : 'Open Duckies'}>
-      <span className={`islandRing ${running ? 'live' : ''}`} style={{ ['--p' as string]: progress }} aria-hidden="true" />
-      <span className="islandTime">{running || seconds < focusSeconds ? format(seconds) : `${done}/${quests.todos.length}`}</span>
-      <span className="islandMeta"><Droplets size={11} aria-hidden="true" />{(water / 1000).toFixed(1)}L</span>
+  return <main className={`island ${mode}`} style={fit ? { width: fit.width, height: fit.height } : undefined} onMouseEnter={() => window.lifeOsDuckies?.setInteractive?.(true)} onMouseLeave={() => { window.lifeOsDuckies?.setInteractive?.(false); setExpanded(false); }}>
+    {mode === 'compact' && compactKind === 'idle' && <div ref={node => { layer.current = node; }} className="islandLayer islandCompact idle">
+      <button type="button" className="islandExpand" onClick={() => setExpanded(true)} aria-label={id ? 'Buka Duckies' : 'Open Duckies'}><PixelDuck /><span className="islandTime">{clock}</span></button>
+      <span className="islandGap" aria-hidden="true" />
+      {bell}
+    </div>}
+    {mode === 'compact' && compactKind !== 'idle' && <button ref={node => { layer.current = node; }} type="button" className={`islandLayer islandCompact ${compactKind}`} onClick={() => setExpanded(true)} aria-label={id ? 'Buka Duckies' : 'Open Duckies'}>
+      {timerActive ? <>
+        <PixelDuck scene={running ? 'focus' : 'idle'} />
+        <span className={`islandRing ${running ? 'live' : ''}`} style={{ ['--p' as string]: progress }} aria-hidden="true" />
+        <span className="islandGap" aria-hidden="true" />
+        <span className="islandTime green">{format(seconds)}</span>
+      </> : quests.todos.length || water ? <>
+        {quests.todos.length ? <span className="islandLead"><span className="islandRing" style={{ ['--p' as string]: done / quests.todos.length }} aria-hidden="true" /><span className="islandTime">{done}/{quests.todos.length}</span></span> : <PixelDuck />}
+        <span className="islandGap" aria-hidden="true" />
+        {water ? <span className="islandMeta"><Droplets size={12} aria-hidden="true" />{(water / 1000).toFixed(1)}L</span> : <PixelDuck />}
+      </> : null}
     </button>}
 
-    {mode === 'toast' && toast && <div key={toast.id} className={`islandLayer islandToast ${toast.tone}`} role="status" aria-live="polite">
-      <span className="islandToastIcon"><Bell size={15} aria-hidden="true" /></span>
+    {mode === 'toast' && toast && <div ref={node => { layer.current = node; }} key={toast.id} className={`islandLayer islandToast ${toast.tone}`} role="status" aria-live="polite">
+      <span className="islandToastIcon"><PixelDuck scene="success" size={28} /></span>
       <div><b>{toast.title}</b><small>{toast.body}</small></div>
     </div>}
 
     {mode === 'expanded' && <section className="islandLayer islandPanel" aria-label="Duckies">
       <header>
-        <strong>Duckies</strong>
+        <strong className="islandBrand"><PixelDuck size={28} />Duckies</strong>
         <nav aria-label={id ? 'Tab Duckies' : 'Duckies tabs'}>{tabs.map(([value, label, Icon]) => <button key={value} type="button" title={label} aria-label={label} aria-pressed={tab === value} className={tab === value ? 'active' : ''} onClick={() => setTab(value)}><Icon size={14} aria-hidden="true" /></button>)}</nav>
         <span className="islandFlags" aria-label={id ? 'Status notifikasi dan suara' : 'Notification and sound status'}>
-          <Bell size={12} className={settings.notifications ? 'on' : ''} aria-hidden="true" />{settings.sound ? <Volume2 size={12} className="on" aria-hidden="true" /> : <VolumeX size={12} aria-hidden="true" />}
+          {bell}{settings.sound ? <Volume2 size={12} className="on" aria-hidden="true" /> : <VolumeX size={12} aria-hidden="true" />}
         </span>
       </header>
       <div className="islandBody">
@@ -144,7 +183,7 @@ export default function DuckiesPage() {
           <strong>{water} / {waterGoal} ml</strong>
           <div className="islandActions"><button type="button" className="primary blue" onClick={addWater}><Plus size={14} aria-hidden="true" />250 ml</button><button type="button" onClick={() => setWater(0)}><RotateCcw size={14} aria-hidden="true" />Reset</button></div>
         </div>}
-        {tab === 'pet' && <div className="islandPet"><span aria-hidden="true">🦆</span><div><b>Ducky</b><p>{done === quests.todos.length && quests.todos.length ? (id ? 'Semua quest beres. Mantap!' : 'All quests done. Nice!') : (id ? 'Selesaikan quest sebelum hari berganti.' : 'Finish your quests before the day ends.')}</p></div></div>}
+        {tab === 'pet' && <div className="islandPet"><PixelDuck scene={done === quests.todos.length && quests.todos.length ? 'success' : 'idle'} size={84} /><div><b>Ducky</b><p>{done === quests.todos.length && quests.todos.length ? (id ? 'Semua quest beres. Mantap!' : 'All quests done. Nice!') : (id ? 'Selesaikan quest sebelum hari berganti.' : 'Finish your quests before the day ends.')}</p></div></div>}
         {tab === 'shelf' && <div className="islandShelf" onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); setFileName(event.dataTransfer.files[0]?.name || ''); }}><FolderDown size={20} aria-hidden="true" /><span>{fileName || (id ? 'Taruh file di sini (sementara).' : 'Drop a file here (temporary).')}</span></div>}
       </div>
     </section>}
