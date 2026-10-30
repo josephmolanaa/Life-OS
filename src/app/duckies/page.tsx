@@ -88,6 +88,8 @@ export default function DuckiesPage() {
     setToast({ ...next, id: Date.now() });
     toastTimer.current = window.setTimeout(() => setToast(null), 4200);
   }, [dnd, settings.notifications, settings.sound]);
+  // Desktop notifications from main (updates, reminders, page `new Notification()`) drop into the island.
+  useEffect(() => window.lifeOsDuckies?.onToast?.(incoming => notify({ title: incoming.title, body: incoming.body, tone: incoming.tone === 'blue' || incoming.tone === 'amber' ? incoming.tone : 'green' })), [notify]);
 
   useEffect(() => {
     if (!running) return;

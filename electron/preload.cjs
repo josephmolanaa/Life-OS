@@ -15,10 +15,31 @@ contextBridge.exposeInMainWorld('lifeOsDuckies', {
   getSettings: () => ipcRenderer.invoke('lifeos:duckies-settings'),
   setSettings: settings => ipcRenderer.invoke('lifeos:duckies-set-settings', settings),
   resize: (height, width) => ipcRenderer.send('lifeos:duckies-resize', { height, width }),
+  showNotification: input => ipcRenderer.send('lifeos:notify', { title: input.title, body: input.body || '', tone: input.tone }),
   onSettings: (listener) => {
     const handler = (_event, settings) => listener(settings);
     ipcRenderer.on('lifeos:duckies-settings-changed', handler);
     return () => ipcRenderer.removeListener('lifeos:duckies-settings-changed', handler);
+  },
+  onToast: (listener) => {
+    const handler = (_event, toast) => listener(toast);
+    ipcRenderer.on('lifeos:duckies-toast', handler);
+    return () => ipcRenderer.removeListener('lifeos:duckies-toast', handler);
+  },
+});
+// Page code calling `new Notification()` lands in the island (main falls back to an OS toast when Duckies is off).
+contextBridge.exposeInMainWorld('lifeOsNotify', (title, body) => ipcRenderer.send('lifeos:notify', { title: String(title), body: String(body || '') }));
+contextBridge.executeInMainWorld({
+  func: () => {
+    const Native = window.Notification;
+    if (!Native || !window.lifeOsNotify) return;
+    function LifeOsNotification(title, options) {
+      window.lifeOsNotify(title, options && options.body);
+      return new EventTarget();
+    }
+    LifeOsNotification.permission = 'granted';
+    LifeOsNotification.requestPermission = () => Promise.resolve('granted');
+    window.Notification = LifeOsNotification;
   },
 });
 

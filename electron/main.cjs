@@ -99,6 +99,24 @@ ipcMain.handle('lifeos:duckies-set-settings', (event, input) => {
   return next;
 });
 ipcMain.on('lifeos:duckies-resize', (event, bounds) => { assertDuckiesWindow(event); resizeDuckies(bounds?.height, bounds?.width); });
+
+// Every Life OS desktop notification drops into the island when Duckies is on; the OS toast is the fallback.
+function showDesktopNotification(title, body, tone = 'green', onClick) {
+  const toast = { title: String(title || 'Life OS').slice(0, 80), body: String(body || '').slice(0, 160), tone: ['green', 'blue', 'amber'].includes(tone) ? tone : 'green' };
+  if (duckiesWindow && !duckiesWindow.isDestroyed() && readDuckiesSettings().notifications) {
+    duckiesWindow.webContents.send('lifeos:duckies-toast', toast);
+    return;
+  }
+  if (!Notification.isSupported()) return;
+  const notification = new Notification({ title: toast.title, body: toast.body });
+  if (onClick) notification.on('click', onClick);
+  notification.show();
+}
+ipcMain.on('lifeos:notify', (event, input) => {
+  assertDuckiesRenderer(event);
+  if (!input || typeof input.title !== 'string') throw new Error('Invalid notification');
+  showDesktopNotification(input.title, typeof input.body === 'string' ? input.body : '', input.tone);
+});
 function closeDuckiesWindow() {
   if (duckiesWindow && !duckiesWindow.isDestroyed()) duckiesWindow.close();
   duckiesWindow = undefined;
@@ -107,7 +125,7 @@ function resizeDuckies(height, width) {
   if (!duckiesWindow || duckiesWindow.isDestroyed()) return;
   if (!Number.isInteger(height) || !Number.isInteger(width) || height < 32 || height > 480 || width < 60 || width > 900) throw new Error('Invalid Duckies bounds');
   const { width: screenWidth } = require('electron').screen.getPrimaryDisplay().workAreaSize;
-  duckiesWindow.setBounds({ x: Math.round((screenWidth - width) / 2), y: 8, width, height });
+  duckiesWindow.setBounds({ x: Math.round((screenWidth - width) / 2), y: 0, width, height });
 }
 function createDuckiesWindow() {
   if (!app.isPackaged || !readDuckiesSettings().enabled || (duckiesWindow && !duckiesWindow.isDestroyed())) return;
@@ -116,7 +134,7 @@ function createDuckiesWindow() {
   const height = 36;
   const screenWidth = screen.getPrimaryDisplay().workAreaSize.width;
   // The window hugs the pill (renderer resizes it), so it is always clickable and never blocks the desktop.
-  duckiesWindow = new BrowserWindow({ width, height, x: Math.round((screenWidth - width) / 2), y: 8, frame: false, transparent: true, alwaysOnTop: true, skipTaskbar: true, resizable: false, movable: false, focusable: true, hasShadow: false, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false } });
+  duckiesWindow = new BrowserWindow({ width, height, x: Math.round((screenWidth - width) / 2), y: 0, frame: false, transparent: true, alwaysOnTop: true, skipTaskbar: true, resizable: false, movable: false, focusable: true, hasShadow: false, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false } });
   duckiesWindow.setAlwaysOnTop(true, 'floating');
   duckiesWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   duckiesWindow.on('closed', () => { duckiesWindow = undefined; });
@@ -392,12 +410,7 @@ function configureAutoUpdater() {
     const version = info?.version || '';
     setUpdateState({ status: autoUpdater.autoDownload ? 'downloading' : 'available', version, percent: 0 });
     console.log('Update available:', version);
-    if (Notification.isSupported()) {
-      new Notification({
-        title: 'Life OS Update',
-        body: version ? `Versi baru v${version} tersedia dan sedang diunduh di latar belakang.` : 'Versi baru tersedia dan sedang diunduh di latar belakang.',
-      }).show();
-    }
+    showDesktopNotification('Life OS Update', version ? `Versi baru v${version} tersedia dan sedang diunduh di latar belakang.` : 'Versi baru tersedia dan sedang diunduh di latar belakang.', 'blue');
   });
   autoUpdater.on('update-downloaded', (info) => {
     const version = info?.version || '';
@@ -408,10 +421,7 @@ function configureAutoUpdater() {
         title: 'Life OS Siap Diperbarui',
         body: version ? `Versi v${version} selesai diunduh. Klik di sini untuk me-restart dan memasang pembaruan sekarang.` : 'Pembaruan selesai diunduh. Klik di sini untuk me-restart dan memasang pembaruan sekarang.',
       });
-      notification.on('click', () => {
-        autoUpdater.quitAndInstall(false, true);
-      });
-      notification.show();
+      showDesktopNotification('Life OS Siap Diperbarui', version ? `Versi v${version} selesai diunduh. Klik di sini untuk me-restart dan memasang pembaruan sekarang.` : 'Pembaruan selesai diunduh. Klik di sini untuk me-restart dan memasang pembaruan sekarang.', 'blue', () => autoUpdater.quitAndInstall(false, true));
     }
     // Jika tidak diklik segera, pembaruan tetap terpasang otomatis saat aplikasi ditutup
   });

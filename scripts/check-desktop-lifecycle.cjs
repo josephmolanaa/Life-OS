@@ -257,9 +257,20 @@ async function checkUpdater() {
   const renderer = new EventEmitter();
   const calls = [];
   renderer.invoke = channel => { calls.push(channel); return Promise.resolve(channel); };
+  const sent = [];
+  renderer.send = (channel, payload) => sent.push([channel, payload]);
+  const mainWorld = [];
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'electron', 'preload.cjs'), 'utf8'), {
-    require: () => ({ ipcRenderer: renderer, contextBridge: { exposeInMainWorld: (name, api) => { exposed[name] = api; } } }),
+    require: () => ({ ipcRenderer: renderer, contextBridge: { exposeInMainWorld: (name, api) => { exposed[name] = api; }, executeInMainWorld: script => mainWorld.push(script) } }),
   });
+  // Page-world shim: `new Notification()` becomes an island toast instead of a corner OS toast.
+  const page = { Notification: function Native() {}, lifeOsNotify: exposed.lifeOsNotify };
+  vm.runInNewContext(`(${mainWorld[0].func})()`, { window: page, EventTarget, Promise });
+  assert.equal(page.Notification.permission, 'granted');
+  new page.Notification('Life OS', { body: 'Notifications enabled!' });
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0][0], 'lifeos:notify');
+  assert.deepEqual(JSON.parse(JSON.stringify(sent[0][1])), { title: 'Life OS', body: 'Notifications enabled!' });
   const duckiesApi = exposed.lifeOsDuckies;
   assert.ok(duckiesApi && typeof duckiesApi.getSettings === 'function');
   assert.ok(typeof duckiesApi.setSettings === 'function');
@@ -277,16 +288,28 @@ async function checkUpdater() {
   const notch = duckiesDesktop.windows[1];
   const notchEvent = { sender: notch.webContents, senderFrame: notch.webContents.mainFrame };
   duckiesDesktop.listeners.get('lifeos:duckies-resize')(notchEvent, { height: 190, width: 640 });
-  assert.deepEqual(JSON.parse(JSON.stringify(notch.bounds)), { x: 640, y: 8, width: 640, height: 190 });
+  assert.deepEqual(JSON.parse(JSON.stringify(notch.bounds)), { x: 640, y: 0, width: 640, height: 190 });
   assert.ok(typeof duckiesApi.onSettings === 'function');
   // Window hugs the pill: never click-through, so hover and clicks always reach it.
   assert.equal(notch.ignoreMouse, undefined);
   duckiesDesktop.listeners.get('lifeos:duckies-resize')(notchEvent, { height: 40, width: 76 });
-  assert.deepEqual(JSON.parse(JSON.stringify(notch.bounds)), { x: 922, y: 8, width: 76, height: 40 });
+  assert.deepEqual(JSON.parse(JSON.stringify(notch.bounds)), { x: 922, y: 0, width: 76, height: 40 });
   assert.throws(() => duckiesDesktop.listeners.get('lifeos:duckies-resize')({ sender: {}, senderFrame: {} }, { height: 40, width: 76 }), /Untrusted frame/);
   assert.throws(() => duckiesDesktop.handlers.get('lifeos:duckies-set-settings')(duckiesEvent, { enabled: 'yes' }), /Invalid Duckies settings/);
   assert.throws(() => duckiesDesktop.handlers.get('lifeos:duckies-set-settings')({ sender: {}, senderFrame: {} }, { enabled: false, notifications: false, sound: false }), /Untrusted frame/);
   assert.throws(() => duckiesDesktop.listeners.get('lifeos:duckies-resize')(notchEvent, { height: 10, width: 640 }), /Invalid Duckies bounds/);
+  // Desktop notifications drop into the island while Duckies notifications are on.
+  const toasts = () => duckiesDesktop.messages.filter(m => m.channel === 'lifeos:duckies-toast').map(m => m.state);
+  duckiesDesktop.listeners.get('lifeos:notify')(duckiesEvent, { title: 'Reminder', body: 'Drink water', tone: 'evil' });
+  assert.deepEqual(toasts(), [{ title: 'Reminder', body: 'Drink water', tone: 'green' }]);
+  assert.throws(() => duckiesDesktop.listeners.get('lifeos:notify')({ sender: {}, senderFrame: {} }, { title: 'x' }), /Untrusted frame/);
+  assert.throws(() => duckiesDesktop.listeners.get('lifeos:notify')(duckiesEvent, { title: 1 }), /Invalid notification/);
+  await duckiesInvoke('duckies-set-settings', { enabled: true, notifications: false, sound: false });
+  const shown = lastNotification;
+  duckiesDesktop.listeners.get('lifeos:notify')(duckiesEvent, { title: 'Fallback', body: '' });
+  assert.equal(toasts().length, 1);
+  assert.notEqual(lastNotification, shown);
+  assert.equal(lastNotification.options.title, 'Fallback');
   await duckiesInvoke('duckies-set-settings', { enabled: false, notifications: false, sound: false });
   assert.equal(notch.destroyed, true);
   console.log('Desktop Duckies OK: settings persistence, window creation/destroy, bounds validation, sender trust.');
