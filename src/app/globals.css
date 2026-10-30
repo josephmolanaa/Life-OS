@@ -38,6 +38,7 @@ body:has(.duckiesRoute) .floatingAiButton, body:has(.duckiesRoute) .floatingAiPa
 .islandToast b { font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
 .islandToast small { color: var(--mute); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .islandToastIcon { width: 40px; height: 40px; flex: 0 0 40px; display: grid; place-items: center; border-radius: 50%; background: #30d158; color: #000; animation: islandPop .5s var(--spring) .12s both; }
+.islandToastAvatar { width: 40px; height: 40px; flex: 0 0 40px; border-radius: 50%; object-fit: cover; margin-right: 8px; background: #000; }
 .islandToast.blue .islandToastIcon { background: #64d2ff; }
 .islandToast.amber .islandToastIcon { background: #ffd60a; }
 .islandPanel { width: 560px; height: 230px; display: flex; flex-direction: column; padding: 16px 22px 18px; }

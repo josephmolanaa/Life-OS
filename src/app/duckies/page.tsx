@@ -8,7 +8,7 @@ import { PixelDuck } from '@/components/pixel-duck';
 
 type Tab = 'quests' | 'timer' | 'water' | 'pet' | 'shelf';
 type Settings = { enabled: boolean; notifications: boolean; sound: boolean };
-type Toast = { id: number; title: string; body: string; tone: 'green' | 'blue' | 'amber' };
+type Toast = { id: number; title: string; body: string; tone: 'green' | 'blue' | 'amber' | 'discord'; image?: string };
 
 const focusSeconds = 25 * 60;
 const waterGoal = 2000;
@@ -17,7 +17,7 @@ const waterGoal = 2000;
 function chime(tone: Toast['tone']) {
   try {
     const context = new AudioContext();
-    const notes = tone === 'green' ? [587.33, 880] : tone === 'blue' ? [523.25, 783.99] : [659.25, 987.77];
+    const notes = tone === 'green' ? [587.33, 880] : tone === 'blue' ? [523.25, 783.99] : tone === 'discord' ? [587.33, 880] : [659.25, 987.77];
     const filter = context.createBiquadFilter();
     filter.type = 'lowpass';
     filter.frequency.value = 3200;
@@ -89,7 +89,7 @@ export default function DuckiesPage() {
     toastTimer.current = window.setTimeout(() => setToast(null), 4200);
   }, [dnd, settings.notifications, settings.sound]);
   // Desktop notifications from main (updates, reminders, page `new Notification()`) drop into the island.
-  useEffect(() => window.lifeOsDuckies?.onToast?.(incoming => notify({ title: incoming.title, body: incoming.body, tone: incoming.tone === 'blue' || incoming.tone === 'amber' ? incoming.tone : 'green' })), [notify]);
+  useEffect(() => window.lifeOsDuckies?.onToast?.(incoming => notify({ title: incoming.title, body: incoming.body, tone: (['blue', 'amber', 'discord'] as const).find(tone => tone === incoming.tone) ?? 'green', image: incoming.image?.startsWith('data:image/png;base64,') ? incoming.image : undefined })), [notify]);
 
   useEffect(() => {
     if (!running) return;
@@ -181,7 +181,7 @@ export default function DuckiesPage() {
     </button>}
 
     <div ref={toastRef} className={`islandLayer islandToast ${lastToast.current?.tone ?? 'green'} ${mode === 'toast' ? 'on' : ''}`} role="status" aria-live="polite">
-      <span key={lastToast.current?.id} className="islandToastIcon"><PixelDuck scene="success" size={28} /></span>
+      {lastToast.current?.image ? <img className="islandToastAvatar" src={lastToast.current.image} alt="" aria-hidden="true" /> : <span className="islandToastIcon"><PixelDuck scene="success" size={28} /></span>}
       <div><b>{lastToast.current?.title ?? 'Duckies'}</b><small>{lastToast.current?.body ?? ''}</small></div>
     </div>
 

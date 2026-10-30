@@ -129,6 +129,27 @@ ipcMain.on('lifeos:notify', (event, input) => {
 // Mirrors every Windows toast (any app) into the island via the built-in WinRT notification listener.
 // The OS still shows its own corner toast: Windows has no public API to suppress other apps' toasts.
 let windowsNotifications;
+// WinRT hides toast images, but Windows keeps each toast's XML in its notification database. Discord
+// writes the sender's avatar to %TEMP% and references it there, so look up the newest toast for this sender.
+function discordAvatar(username) {
+  try {
+    const { DatabaseSync } = require('node:sqlite');
+    const db = new DatabaseSync(path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'Windows', 'Notifications', 'wpndatabase.db'), { readOnly: true });
+    try {
+      const rows = db.prepare("SELECT n.Payload FROM Notification n JOIN NotificationHandler h ON h.RecordId = n.HandlerId WHERE h.PrimaryId LIKE '%Discord%' AND n.Type = 'toast' AND n.Payload IS NOT NULL ORDER BY n.ArrivalTime DESC LIMIT 20").all();
+      const escaped = username.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      const xml = rows.map(row => Buffer.from(row.Payload).toString('utf8')).find(text => text.includes(`<text>${escaped}</text>`));
+      const src = xml?.match(/<image[^>]*\ssrc="([^"]+)"/)?.[1];
+      if (!src) return undefined;
+      // Only read PNGs Discord dropped in the user's temp folder; never follow arbitrary paths from a payload.
+      const file = path.resolve(src);
+      const temp = path.resolve(app.getPath('temp'));
+      if (path.dirname(file).toLowerCase() !== temp.toLowerCase() || path.extname(file).toLowerCase() !== '.png') return undefined;
+      const data = fs.readFileSync(file);
+      return data.length <= 512 * 1024 ? `data:image/png;base64,${data.toString('base64')}` : undefined;
+    } finally { db.close(); }
+  } catch { return undefined; }
+}
 function startWindowsNotifications() {
   if (process.platform !== 'win32' || windowsNotifications) return;
   try {
@@ -147,6 +168,11 @@ function startWindowsNotifications() {
       try { item = JSON.parse(line); } catch { continue; }
       if (item?.type !== 'toast' || !duckiesWindow || duckiesWindow.isDestroyed() || !readDuckiesSettings().notifications) continue;
       const title = String(item.title || item.app || 'Windows').slice(0, 80);
+      if (item.app === 'Discord') {
+        // Discord: avatar + username + "N New Messages", like its own toast.
+        duckiesWindow.webContents.send('lifeos:duckies-toast', { title, body: String(item.body || '').slice(0, 160), tone: 'discord', image: discordAvatar(title) });
+        continue;
+      }
       const body = [item.app && item.app !== title ? item.app : '', String(item.body || '')].filter(Boolean).join(' · ').slice(0, 160);
       duckiesWindow.webContents.send('lifeos:duckies-toast', { title, body, tone: 'blue' });
     }
