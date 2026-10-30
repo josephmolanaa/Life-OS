@@ -126,9 +126,41 @@ ipcMain.on('lifeos:notify', (event, input) => {
   if (!input || typeof input.title !== 'string') throw new Error('Invalid notification');
   showDesktopNotification(input.title, typeof input.body === 'string' ? input.body : '', input.tone);
 });
+// Mirrors every Windows toast (any app) into the island via the built-in WinRT notification listener.
+// The OS still shows its own corner toast: Windows has no public API to suppress other apps' toasts.
+let windowsNotifications;
+function startWindowsNotifications() {
+  if (process.platform !== 'win32' || windowsNotifications) return;
+  try {
+    // PowerShell can't read files inside app.asar, so stage the script in userData first.
+    const script = path.join(app.getPath('userData'), 'windows-notifications.ps1');
+    fs.writeFileSync(script, fs.readFileSync(path.join(__dirname, 'windows-notifications.ps1')));
+    windowsNotifications = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script], { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+  } catch (error) { console.error('Windows notification listener unavailable:', error); return; }
+  let buffer = '';
+  windowsNotifications.stdout.on('data', chunk => {
+    buffer += chunk;
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() || '';
+    for (const line of lines) {
+      let item;
+      try { item = JSON.parse(line); } catch { continue; }
+      if (item?.type !== 'toast' || !duckiesWindow || duckiesWindow.isDestroyed() || !readDuckiesSettings().notifications) continue;
+      const title = String(item.title || item.app || 'Windows').slice(0, 80);
+      const body = [item.app && item.app !== title ? item.app : '', String(item.body || '')].filter(Boolean).join(' · ').slice(0, 160);
+      duckiesWindow.webContents.send('lifeos:duckies-toast', { title, body, tone: 'blue' });
+    }
+  });
+  windowsNotifications.on('exit', () => { windowsNotifications = undefined; });
+}
+function stopWindowsNotifications() {
+  windowsNotifications?.kill();
+  windowsNotifications = undefined;
+}
 function closeDuckiesWindow() {
   if (duckiesWindow && !duckiesWindow.isDestroyed()) duckiesWindow.close();
   duckiesWindow = undefined;
+  stopWindowsNotifications();
 }
 function resizeDuckies(height, width) {
   if (!duckiesWindow || duckiesWindow.isDestroyed()) return;
@@ -146,8 +178,9 @@ function createDuckiesWindow() {
   duckiesWindow.setShape([{ x: (width - 160) / 2, y: 0, width: 160, height: 36 }]);
   duckiesWindow.setAlwaysOnTop(true, 'floating');
   duckiesWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  duckiesWindow.on('closed', () => { duckiesWindow = undefined; });
+  duckiesWindow.on('closed', () => { duckiesWindow = undefined; stopWindowsNotifications(); });
   duckiesWindow.loadURL(`http://127.0.0.1:${port}/duckies`).catch(console.error);
+  startWindowsNotifications();
 }
 
 const port = Number(process.env.PORT || 63027);
@@ -464,5 +497,6 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   quitting = true;
+  stopWindowsNotifications();
   stopServer();
 });

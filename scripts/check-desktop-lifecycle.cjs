@@ -110,7 +110,7 @@ function launch({ args = [], packaged = true, userData = tempDirectory('lifeos-t
     'node:crypto': require('node:crypto'),
     electron,
     'electron-updater': { autoUpdater: updater },
-    'node:child_process': { spawn: () => { const child = new EventEmitter(); child.kill = () => { child.killed = true; }; spawned.push(child); return child; } },
+    'node:child_process': { spawn: () => { const child = new EventEmitter(); child.stdout = new EventEmitter(); child.kill = () => { child.killed = true; }; spawned.push(child); return child; } },
     'node:fs': fs,
     'node:http': { get: (_url, callback) => { queueMicrotask(() => callback({ resume() {} })); return { setTimeout() {}, on() {} }; } },
     'node:path': path,
@@ -318,6 +318,8 @@ async function checkUpdater() {
   assert.equal(lastNotification.options.title, 'Fallback');
   await duckiesInvoke('duckies-set-settings', { enabled: false, notifications: false, sound: false });
   assert.equal(notch.destroyed, true);
+  assert.equal(desktop.spawned.length, 1, 'Windows notification listener started on open');
+  assert.equal(desktop.spawned[0].killed, true, 'Windows notification listener stopped on close');
   console.log('Desktop Duckies OK: settings persistence, window creation/destroy, bounds validation, sender trust.');
 
   const api = exposed.lifeOsUpdater;

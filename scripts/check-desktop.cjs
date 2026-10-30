@@ -9,7 +9,7 @@ const project = path.join(__dirname, '..');
 const archive = path.join(resources, 'app.asar');
 const files = new Set(asar.listPackage(archive).map((file) => file.replaceAll('\\', '/').replace(/^\//, '')));
 assert.ok(files.has('electron/preload.cjs'), 'Missing secure-storage preload');
-for (const file of ['electron/main.cjs', 'electron/preload.cjs']) {
+for (const file of ['electron/main.cjs', 'electron/preload.cjs', 'electron/windows-notifications.ps1']) {
   assert.equal(asar.extractFile(archive, file).toString(), fs.readFileSync(path.join(project, file), 'utf8'), `Stale packaged source: ${file}`);
 }
 const activityWatchOwner = asar.extractFile(archive, 'electron/main.cjs').toString();

@@ -4,17 +4,19 @@
 .duckiesRoute { --spring: linear(0, 0.024, 0.074, 0.142, 0.223, 0.309, 0.397, 0.483, 0.564, 0.64, 0.709, 0.771, 0.824, 0.87, 0.909, 0.941, 0.967, 0.988, 1.004, 1.015, 1.024, 1.029, 1.032, 1.033, 1.033, 1.032, 1.03, 1.028, 1.025, 1.022, 1.019, 1.016, 1.013, 1.011, 1.009, 1.007, 1.005, 1.004, 1.003, 1.002, 1); height: 100vh; background: transparent; display: flex; justify-content: center; align-items: flex-start; padding-top: 0; }
 html:has(.duckiesRoute), body:has(.duckiesRoute) { overflow: hidden; scrollbar-width: none; background: transparent !important; }
 body:has(.duckiesRoute) .floatingAiButton, body:has(.duckiesRoute) .floatingAiPanel { display: none !important; }
-.island { --mute: #98989d; position: relative; width: 72px; height: 36px; background: #000; color: #fff; border-radius: 18px; overflow: hidden; font-family: system-ui, -apple-system, 'SF Pro Text', 'Segoe UI Variable Text', 'Segoe UI', sans-serif; font-feature-settings: 'tnum'; -webkit-font-smoothing: antialiased; box-shadow: 0 0 0 .5px rgba(255,255,255,.1), 0 8px 24px -6px rgba(0,0,0,.55); transition: width .5s var(--spring), height .5s var(--spring), border-radius .5s var(--spring), box-shadow .35s ease, scale .25s ease; user-select: none; will-change: width, height; }
+.island { --mute: #98989d; position: relative; width: 72px; height: 36px; background: #000; color: #fff; border-radius: 18px; overflow: hidden; font-family: system-ui, -apple-system, 'SF Pro Text', 'Segoe UI Variable Text', 'Segoe UI', sans-serif; font-feature-settings: 'tnum'; -webkit-font-smoothing: antialiased; box-shadow: inset 0 0 0 .5px rgba(255,255,255,.14); transition: width .5s var(--spring), height .5s var(--spring), border-radius .5s var(--spring), scale .25s ease; user-select: none; will-change: width, height; }
 .island.compact:hover { scale: 1.02; }
 .island.toast { border-radius: 32px; }
-.island.expanded { width: 560px !important; height: 230px !important; border-radius: 42px; box-shadow: 0 0 0 .5px rgba(255,255,255,.12), 0 18px 48px -10px rgba(0,0,0,.7); }
+.island.expanded { width: 560px !important; height: 230px !important; border-radius: 42px; }
 .island button { font: inherit; color: inherit; }
 .islandLayer { position: absolute; top: 0; left: 50%; translate: -50% 0; opacity: 0; pointer-events: none; transition: opacity .25s ease; }
 .islandLayer.on { opacity: 1; pointer-events: auto; animation: islandIn .38s var(--spring) both; }
 .islandLayer.toast.on { animation: islandPop .5s var(--spring) .12s both; }
 .islandLayer::before { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; transition: box-shadow .35s ease; }
 .islandCompact { width: max-content; min-width: 72px; height: 36px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; border: 0; background: transparent; cursor: pointer; font-size: 13px; font-weight: 600; white-space: nowrap; }
-.islandCompact.idle { padding: 0 6px 0 10px; cursor: default; align-items: center; gap: 8px; }
+/* Idle: duck | clock | bell in a symmetric grid so the clock sits on the island's true center. */
+.islandCompact.idle { display: grid; grid-template-columns: 28px auto 28px; column-gap: 14px; justify-content: center; padding: 0 5px; cursor: default; }
+.islandCompact.idle .islandExpand { display: contents; }
 .islandCompact.idle .islandTime { font-size: 13px; font-weight: 600; letter-spacing: -.01em; }
 .islandExpand { display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0; border: 0; background: transparent; cursor: pointer; }
 .islandBell { width: 26px; height: 26px; display: grid; place-items: center; border: 0; border-radius: 50%; background: transparent; color: var(--mute); cursor: pointer; transition: background .25s ease, color .25s ease, scale .2s ease; }
