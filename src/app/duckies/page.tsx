@@ -1,17 +1,42 @@
 'use client';
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { CheckSquare, Clock, Droplets, Cat, FolderDown, Pause, Play, RotateCcw, Plus, Bell, BellOff, Volume2, VolumeX } from 'lucide-react';
+import { CheckSquare, Clock, Droplets, Cat, FolderDown, Pause, Play, RotateCcw, Minus, Plus, Bell, BellOff, Volume2, VolumeX, X, FileText } from 'lucide-react';
 import { useDailyQuests } from '@/components/use-daily-quests';
 import { getLang, type Lang } from '@/lib/i18n';
-import { PixelDuck } from '@/components/pixel-duck';
+import { PixelDuck, duckScenes, type DuckScene } from '@/components/pixel-duck';
 
 type Tab = 'quests' | 'timer' | 'water' | 'pet' | 'shelf';
 type Settings = { enabled: boolean; notifications: boolean; sound: boolean };
 type Toast = { id: number; title: string; body: string; tone: 'green' | 'blue' | 'amber' | 'discord'; image?: string };
+type ShelfItem = { id: number; name: string; detail: string; url?: string };
 
-const focusSeconds = 25 * 60;
-const waterGoal = 2000;
+const focusPresets = [15, 25, 45, 60];
+const waterAmounts = [
+  { ml: 200, id: 'Gelas', en: 'Glass' },
+  { ml: 250, id: 'Cangkir', en: 'Cup' },
+  { ml: 500, id: 'Botol', en: 'Bottle' },
+  { ml: 750, id: 'Tumbler', en: 'Tumbler' },
+];
+const waterGoals = [1500, 2000, 2500, 3000];
+const reminderPresets = [0, 30, 60, 90];
+const petNames: Record<DuckScene, [string, string]> = {
+  idle: ['Santai', 'Chill'],
+  focus: ['Koding', 'Coding'],
+  success: ['Rayakan', 'Party'],
+  debug: ['Debug', 'Debug'],
+  error: ['Panik', 'Panic'],
+  coffee: ['Ngopi', 'Coffee'],
+  music: ['Lo-fi', 'Lo-fi'],
+};
+
+const readNumber = (key: string, fallback: number, min: number, max: number) => {
+  const value = Number(localStorage.getItem(key));
+  return Number.isInteger(value) && value >= min && value <= max ? value : fallback;
+};
+
+const sizeLabel = (bytes: number) =>
+  bytes < 1024 ? `${bytes} B` : bytes < 1048576 ? `${(bytes / 1024).toFixed(0)} KB` : `${(bytes / 1048576).toFixed(1)} MB`;
 
 // Two-note glass chime: soft attack, long exponential tail, octave partial, low-pass for warmth.
 function chime(tone: Toast['tone']) {
@@ -45,10 +70,14 @@ export default function DuckiesPage() {
   const [lang, setLang] = useState<Lang>('en');
   const [expanded, setExpanded] = useState(false);
   const [tab, setTab] = useState<Tab>('quests');
-  const [seconds, setSeconds] = useState(focusSeconds);
+  const [focusMinutes, setFocusMinutes] = useState(25);
+  const [seconds, setSeconds] = useState(25 * 60);
   const [running, setRunning] = useState(false);
   const [water, setWater] = useState(0);
-  const [fileName, setFileName] = useState('');
+  const [waterGoal, setWaterGoal] = useState(2000);
+  const [reminderMinutes, setReminderMinutes] = useState(0);
+  const [pet, setPet] = useState<DuckScene>('idle');
+  const [shelf, setShelf] = useState<ShelfItem[]>([]);
   const [settings, setSettings] = useState<Settings>({ enabled: true, notifications: false, sound: false });
   const [toast, setToast] = useState<Toast | null>(null);
   const [dnd, setDnd] = useState(false);
@@ -70,6 +99,13 @@ export default function DuckiesPage() {
       if (Number.isInteger(saved.water) && saved.water >= 0 && saved.water <= 10000 && saved.day === new Date().toDateString()) setWater(saved.water);
     } catch { /* Corrupt state falls back to defaults. */ }
     setDnd(localStorage.getItem('lifeos-duckies-dnd') === '1');
+    const minutes = readNumber('lifeos-duckies-focus', 25, 1, 180);
+    setFocusMinutes(minutes);
+    try { if (!Number.isInteger(JSON.parse(localStorage.getItem('lifeos-duckies-state') || '{}').seconds)) setSeconds(minutes * 60); } catch { setSeconds(minutes * 60); }
+    setWaterGoal(readNumber('lifeos-duckies-water-goal', 2000, 250, 10000));
+    setReminderMinutes(readNumber('lifeos-duckies-water-reminder', 0, 0, 240));
+    const savedPet = localStorage.getItem('lifeos-duckies-pet');
+    if (duckScenes.includes(savedPet as DuckScene)) setPet(savedPet as DuckScene);
     // Desktop clock in the system locale; a string state skips re-renders until the minute changes.
     const tick = () => setClock(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
     tick();
@@ -102,8 +138,48 @@ export default function DuckiesPage() {
     return () => window.clearInterval(timer);
   }, [running, notify, id]);
 
+  // Water reminder: nudges every N minutes until today's goal is met.
+  useEffect(() => {
+    if (!reminderMinutes || water >= waterGoal) return;
+    const timer = window.setInterval(() => notify({ title: id ? 'Waktunya minum' : 'Time to drink', body: `${water} / ${waterGoal} ml`, tone: 'blue' }), reminderMinutes * 60000);
+    return () => window.clearInterval(timer);
+  }, [reminderMinutes, water, waterGoal, notify, id]);
+
   const mode = expanded ? 'expanded' : toast ? 'toast' : 'compact';
+  const focusSeconds = focusMinutes * 60;
   const timerActive = running || seconds < focusSeconds;
+  const setFocus = (minutes: number) => {
+    const next = Math.min(180, Math.max(1, minutes));
+    localStorage.setItem('lifeos-duckies-focus', String(next));
+    setFocusMinutes(next);
+    if (!running) setSeconds(next * 60);
+  };
+  const chooseGoal = (goal: number) => { localStorage.setItem('lifeos-duckies-water-goal', String(goal)); setWaterGoal(goal); };
+  const chooseReminder = (minutes: number) => { localStorage.setItem('lifeos-duckies-water-reminder', String(minutes)); setReminderMinutes(minutes); };
+  const choosePet = (scene: DuckScene) => { localStorage.setItem('lifeos-duckies-pet', scene); setPet(scene); };
+  // Shelf: temporary, in-memory only. Files come from drag-drop or Ctrl+V; nothing is opened or uploaded.
+  const addToShelf = (files: File[], text = '') => {
+    const items: ShelfItem[] = files.map((file, index) => ({ id: Date.now() + index, name: file.name || (id ? 'Gambar ditempel' : 'Pasted image'), detail: sizeLabel(file.size), url: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined }));
+    if (!items.length && text.trim()) items.push({ id: Date.now(), name: text.trim().slice(0, 60), detail: `${text.length} ${id ? 'karakter' : 'chars'}` });
+    if (items.length) setShelf(current => [...items, ...current].slice(0, 12));
+  };
+  const removeFromShelf = (item: ShelfItem) => { if (item.url?.startsWith('blob:')) URL.revokeObjectURL(item.url); setShelf(current => current.filter(entry => entry.id !== item.id)); };
+  // Desktop: read the OS clipboard through main (copied Explorer files, screenshots, text).
+  const pasteFromClipboard = async () => {
+    const clip = await window.lifeOsDuckies?.readClipboard?.();
+    if (!clip || clip.error) {
+      console.error('Clipboard read failed:', clip?.error || clip?.output);
+      return false;
+    }
+    const now = Date.now();
+    const items: ShelfItem[] = clip.files?.length
+      ? clip.files.map((file, index) => ({ id: now + index, name: file.name, detail: sizeLabel(file.size) }))
+      : clip.image ? [{ id: now, name: id ? 'Gambar ditempel' : 'Pasted image', detail: sizeLabel(clip.image.size), url: clip.image.preview }]
+      : clip.text ? [{ id: now, name: clip.text.trim().slice(0, 60), detail: `${clip.text.length} ${id ? 'karakter' : 'chars'}` }] : [];
+    if (items.length) setShelf(current => [...items, ...current].slice(0, 12));
+    return true;
+  };
+
   // All three layers stay mounted and crossfade; only the black pill's size springs. Each layer is
   // measured continuously so the pill always knows the size of what it is about to show.
   const compactRef = useRef<HTMLElement | null>(null);
@@ -150,8 +226,8 @@ export default function DuckiesPage() {
 
   const format = (value: number) => `${Math.floor(value / 60).toString().padStart(2, '0')}:${(value % 60).toString().padStart(2, '0')}`;
   const progress = 1 - seconds / focusSeconds;
-  const addWater = () => setWater(value => {
-    const next = Math.min(10000, value + 250);
+  const addWater = (amount: number) => setWater(value => {
+    const next = Math.min(10000, value + amount);
     if (value < waterGoal && next >= waterGoal) notify({ title: id ? 'Target air tercapai' : 'Water goal reached', body: `${next} / ${waterGoal} ml`, tone: 'blue' });
     return next;
   });
@@ -164,19 +240,19 @@ export default function DuckiesPage() {
 
   return <main ref={islandRef} className={`island ${mode}`} style={{ width, height }} onMouseEnter={hoverIn} onMouseLeave={hoverOut}>
     {compactKind === 'idle' && <div ref={node => { compactRef.current = node; }} className={`islandLayer islandCompact idle ${mode === 'compact' ? 'on' : ''}`} aria-hidden={mode !== 'compact'}>
-      <button type="button" className="islandExpand" onClick={() => setExpanded(true)} aria-label={id ? 'Buka Duckies' : 'Open Duckies'}><PixelDuck /><span className="islandTime">{clock}</span></button>
+      <button type="button" className="islandExpand" onClick={() => setExpanded(true)} aria-label={id ? 'Buka Duckies' : 'Open Duckies'}><PixelDuck scene={pet} /><span className="islandTime">{clock}</span></button>
       {bell}
     </div>}
     {compactKind !== 'idle' && <button ref={node => { compactRef.current = node; }} type="button" className={`islandLayer islandCompact ${compactKind} ${mode === 'compact' ? 'on' : ''}`} aria-hidden={mode !== 'compact'} tabIndex={mode === 'compact' ? 0 : -1} onClick={() => setExpanded(true)} aria-label={id ? 'Buka Duckies' : 'Open Duckies'}>
       {timerActive ? <>
-        <PixelDuck scene={running ? 'focus' : 'idle'} />
+        <PixelDuck scene={running ? 'focus' : pet} />
         <span className={`islandRing ${running ? 'live' : ''}`} style={{ ['--p' as string]: progress }} aria-hidden="true" />
         <span className="islandGap" aria-hidden="true" />
         <span className="islandTime green">{format(seconds)}</span>
       </> : quests.todos.length || water ? <>
-        {quests.todos.length ? <span className="islandLead"><span className="islandRing" style={{ ['--p' as string]: done / quests.todos.length }} aria-hidden="true" /><span className="islandTime">{done}/{quests.todos.length}</span></span> : <PixelDuck />}
+        {quests.todos.length ? <span className="islandLead"><span className="islandRing" style={{ ['--p' as string]: done / quests.todos.length }} aria-hidden="true" /><span className="islandTime">{done}/{quests.todos.length}</span></span> : <PixelDuck scene={pet} />}
         <span className="islandGap" aria-hidden="true" />
-        {water ? <span className="islandMeta"><Droplets size={12} aria-hidden="true" />{(water / 1000).toFixed(1)}L</span> : <PixelDuck />}
+        {water ? <span className="islandMeta"><Droplets size={12} aria-hidden="true" />{(water / 1000).toFixed(1)}L</span> : <PixelDuck scene={pet} />}
       </> : null}
     </button>}
 
@@ -187,7 +263,7 @@ export default function DuckiesPage() {
 
     <section className={`islandLayer islandPanel ${mode === 'expanded' ? 'on' : ''}`} aria-label="Duckies" aria-hidden={mode !== 'expanded'}>
       <header>
-        <strong className="islandBrand"><PixelDuck size={28} />Duckies</strong>
+        <strong className="islandBrand"><PixelDuck scene={pet} size={28} />Duckies</strong>
         <nav aria-label={id ? 'Tab Duckies' : 'Duckies tabs'}>{tabs.map(([value, label, Icon]) => <button key={value} type="button" title={label} aria-label={label} aria-pressed={tab === value} className={tab === value ? 'active' : ''} onClick={() => setTab(value)}><Icon size={14} aria-hidden="true" /></button>)}</nav>
         <span className="islandFlags" aria-label={id ? 'Status notifikasi dan suara' : 'Notification and sound status'}>
           {bell}{settings.sound ? <Volume2 size={12} className="on" aria-hidden="true" /> : <VolumeX size={12} aria-hidden="true" />}
@@ -200,20 +276,44 @@ export default function DuckiesPage() {
           {quests.error && <p role="alert" className="islandMuted">{quests.error}</p>}
           {!quests.loading && !quests.todos.length && <p className="islandMuted">{id ? 'Belum ada quest hari ini.' : 'No quests today.'}</p>}
         </div>}
-        {tab === 'timer' && <div className="islandCenter">
+        {tab === 'timer' && <div className="islandSplit">
           <div className="islandDial" style={{ ['--p' as string]: progress }}><strong>{format(seconds)}</strong></div>
-          <div className="islandActions">
-            <button type="button" className="primary" onClick={() => setRunning(value => !value)}>{running ? <Pause size={14} aria-hidden="true" /> : <Play size={14} aria-hidden="true" />}{running ? (id ? 'Jeda' : 'Pause') : (id ? 'Mulai' : 'Start')}</button>
-            <button type="button" onClick={() => { setRunning(false); setSeconds(focusSeconds); }}><RotateCcw size={14} aria-hidden="true" />Reset</button>
+          <div className="islandControls">
+            <div className="islandStepper" aria-label={id ? 'Durasi fokus' : 'Focus length'}>
+              <button type="button" onClick={() => setFocus(focusMinutes - 5)} disabled={running || focusMinutes <= 1} aria-label={id ? 'Kurangi 5 menit' : 'Minus 5 minutes'}><Minus size={13} aria-hidden="true" /></button>
+              <label><input type="number" min={1} max={180} value={focusMinutes} disabled={running} onChange={event => setFocus(Math.round(Number(event.target.value) || 1))} aria-label={id ? 'Menit' : 'Minutes'} /><span>{id ? 'menit' : 'min'}</span></label>
+              <button type="button" onClick={() => setFocus(focusMinutes + 5)} disabled={running || focusMinutes >= 180} aria-label={id ? 'Tambah 5 menit' : 'Plus 5 minutes'}><Plus size={13} aria-hidden="true" /></button>
+            </div>
+            <div className="islandChips">{focusPresets.map(minutes => <button key={minutes} type="button" className={focusMinutes === minutes ? 'active' : ''} disabled={running} onClick={() => setFocus(minutes)}>{minutes}m</button>)}</div>
+            <div className="islandActions">
+              <button type="button" className="primary" onClick={() => setRunning(value => !value)}>{running ? <Pause size={14} aria-hidden="true" /> : <Play size={14} aria-hidden="true" />}{running ? (id ? 'Jeda' : 'Pause') : (id ? 'Mulai' : 'Start')}</button>
+              <button type="button" onClick={() => { setRunning(false); setSeconds(focusSeconds); }}><RotateCcw size={14} aria-hidden="true" />Reset</button>
+            </div>
           </div>
         </div>}
-        {tab === 'water' && <div className="islandCenter">
-          <div className="islandWater"><i style={{ width: `${Math.min(100, water / waterGoal * 100)}%` }} /></div>
-          <strong>{water} / {waterGoal} ml</strong>
-          <div className="islandActions"><button type="button" className="primary blue" onClick={addWater}><Plus size={14} aria-hidden="true" />250 ml</button><button type="button" onClick={() => setWater(0)}><RotateCcw size={14} aria-hidden="true" />Reset</button></div>
+        {tab === 'water' && <div className="islandSplit">
+          <div className="islandWaterSummary">
+            <strong>{water}<small> / {waterGoal} ml</small></strong>
+            <div className="islandWater"><i style={{ width: `${Math.min(100, water / waterGoal * 100)}%` }} /></div>
+            <button type="button" className="islandLink" onClick={() => setWater(0)}><RotateCcw size={12} aria-hidden="true" />Reset</button>
+          </div>
+          <div className="islandControls">
+            <div className="islandChips">{waterAmounts.map(item => <button key={item.ml} type="button" className="blue" onClick={() => addWater(item.ml)} title={id ? item.id : item.en}>+{item.ml}<small>{id ? item.id : item.en}</small></button>)}</div>
+            <div className="islandChipRow"><span>{id ? 'Target' : 'Goal'}</span>{waterGoals.map(goal => <button key={goal} type="button" className={waterGoal === goal ? 'active' : ''} onClick={() => chooseGoal(goal)}>{goal / 1000}L</button>)}</div>
+            <div className="islandChipRow"><span>{id ? 'Ingatkan' : 'Remind'}</span>{reminderPresets.map(minutes => <button key={minutes} type="button" className={reminderMinutes === minutes ? 'active' : ''} onClick={() => chooseReminder(minutes)}>{minutes ? `${minutes}m` : (id ? 'Mati' : 'Off')}</button>)}</div>
+          </div>
         </div>}
-        {tab === 'pet' && <div className="islandPet"><PixelDuck scene={done === quests.todos.length && quests.todos.length ? 'success' : 'idle'} size={84} /><div><b>Ducky</b><p>{done === quests.todos.length && quests.todos.length ? (id ? 'Semua quest beres. Mantap!' : 'All quests done. Nice!') : (id ? 'Selesaikan quest sebelum hari berganti.' : 'Finish your quests before the day ends.')}</p></div></div>}
-        {tab === 'shelf' && <div className="islandShelf" onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); setFileName(event.dataTransfer.files[0]?.name || ''); }}><FolderDown size={20} aria-hidden="true" /><span>{fileName || (id ? 'Taruh file di sini (sementara).' : 'Drop a file here (temporary).')}</span></div>}
+        {tab === 'pet' && <div className="islandPet">
+          <PixelDuck scene={pet} size={84} />
+          <div className="islandPetPicker">
+            <p className="islandMuted">{id ? 'Pilih model Duckies — dipakai juga di island.' : 'Pick a Duckies model — used on the island too.'}</p>
+            <div role="radiogroup" aria-label={id ? 'Model Duckies' : 'Duckies model'}>{duckScenes.map(scene => <button key={scene} type="button" role="radio" aria-checked={pet === scene} className={pet === scene ? 'active' : ''} onClick={() => choosePet(scene)} title={petNames[scene][id ? 0 : 1]}><PixelDuck scene={scene} size={28} /><span>{petNames[scene][id ? 0 : 1]}</span></button>)}</div>
+          </div>
+        </div>}
+        {tab === 'shelf' && <div className={`islandShelf ${shelf.length ? 'filled' : ''}`} tabIndex={0} role="region" aria-label={id ? 'Shelf: tarik file atau tekan Ctrl+V' : 'Shelf: drop files or press Ctrl+V'} onClick={event => { event.currentTarget.focus(); void pasteFromClipboard(); }} onKeyDown={event => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'v' && window.lifeOsDuckies?.readClipboard) { event.preventDefault(); void pasteFromClipboard(); } }} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); addToShelf([...event.dataTransfer.files], event.dataTransfer.getData('text/plain')); }} onPaste={event => { event.preventDefault(); addToShelf([...event.clipboardData.files], event.clipboardData.getData('text/plain')); }}>
+          {shelf.length ? <ul>{shelf.map(item => <li key={item.id}>{item.url ? <img src={item.url} alt="" /> : <FileText size={18} aria-hidden="true" />}<span><b>{item.name}</b><small>{item.detail}</small></span><button type="button" onClick={event => { event.stopPropagation(); removeFromShelf(item); }} aria-label={`${id ? 'Hapus' : 'Remove'} ${item.name}`}><X size={12} aria-hidden="true" /></button></li>)}</ul>
+            : <><FolderDown size={20} aria-hidden="true" /><span>{id ? 'Taruh file di sini, atau klik / Ctrl+V untuk tempel dari clipboard.' : 'Drop files here, or click / Ctrl+V to paste from clipboard.'}</span></>}
+        </div>}
       </div>
     </section>
   </main>;

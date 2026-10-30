@@ -98,16 +98,19 @@ ipcMain.handle('lifeos:duckies-set-settings', (event, input) => {
   if (duckiesWindow && !duckiesWindow.isDestroyed()) duckiesWindow.webContents.send('lifeos:duckies-settings-changed', next);
   return next;
 });
-ipcMain.on('lifeos:duckies-resize', (event, bounds) => { assertDuckiesWindow(event); resizeDuckies(bounds?.height, bounds?.width); });
+// ipcMain.on listeners have no caller to reject to: a throw there is an uncaught main-process exception
+// (crash dialog). Drop untrusted or malformed fire-and-forget messages instead of throwing.
+const safeListener = handler => (...args) => { try { handler(...args); } catch (error) { console.warn('Ignored Duckies IPC:', error.message); } };
+ipcMain.on('lifeos:duckies-resize', safeListener((event, bounds) => { assertDuckiesWindow(event); resizeDuckies(bounds?.height, bounds?.width); }));
 // The window never resizes (a resized transparent window repaints blank on Windows = blink). Instead the
 // renderer reports the pill rect and the OS clips the window to it: outside is invisible and click-through.
 const duckiesCanvas = { width: 600, height: 260 };
-ipcMain.on('lifeos:duckies-shape', (event, rect) => {
+ipcMain.on('lifeos:duckies-shape', safeListener((event, rect) => {
   assertDuckiesWindow(event);
   const values = [rect?.x, rect?.y, rect?.width, rect?.height];
   if (!values.every(Number.isInteger) || rect.x < 0 || rect.y < 0 || rect.width < 1 || rect.height < 1 || rect.x + rect.width > duckiesCanvas.width || rect.y + rect.height > duckiesCanvas.height) throw new Error('Invalid Duckies shape');
   if (duckiesWindow && !duckiesWindow.isDestroyed()) duckiesWindow.setShape([{ x: rect.x, y: rect.y, width: rect.width, height: rect.height }]);
-});
+}));
 
 // Every Life OS desktop notification drops into the island when Duckies is on; the OS toast is the fallback.
 function showDesktopNotification(title, body, tone = 'green', onClick) {
@@ -121,11 +124,34 @@ function showDesktopNotification(title, body, tone = 'green', onClick) {
   if (onClick) notification.on('click', onClick);
   notification.show();
 }
-ipcMain.on('lifeos:notify', (event, input) => {
+// Shelf paste: the island window rarely takes OS keyboard focus (it is clipped with setShape), so the
+// renderer asks main for the clipboard on click / Ctrl+V. Returns names and sizes only, never file contents.
+// This Electron build's clipboard only reads text, so Windows' own clipboard (via PowerShell) supplies
+// copied files and images.
+ipcMain.handle('lifeos:duckies-clipboard', async event => {
+  assertDuckiesWindow(event);
+  const script = path.join(app.getPath('userData'), 'read-clipboard.ps1');
+  fs.writeFileSync(script, fs.readFileSync(path.join(__dirname, 'read-clipboard.ps1')));
+  const output = await new Promise(resolve => {
+    const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-STA', '-ExecutionPolicy', 'Bypass', '-File', script], { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+    let text = '';
+    const timer = setTimeout(() => child.kill(), 8000);
+    child.stdout.on('data', chunk => { text += chunk; });
+    child.on('error', () => { clearTimeout(timer); resolve(''); });
+    child.on('exit', () => { clearTimeout(timer); resolve(text); });
+  });
+  let clip;
+  try { clip = JSON.parse(output || '{}'); } catch { return {}; }
+  const files = (Array.isArray(clip.files) ? clip.files : clip.files ? [clip.files] : []).filter(file => typeof file?.name === 'string' && Number.isFinite(file.size)).map(file => ({ name: file.name.slice(0, 200), size: file.size }));
+  if (files.length) return { files };
+  if (typeof clip.image?.preview === 'string' && clip.image.preview.startsWith('data:image/png;base64,') && clip.image.preview.length < 400000) return { image: { size: Number(clip.image.size) || 0, preview: clip.image.preview } };
+  return typeof clip.text === 'string' && clip.text.trim() ? { text: clip.text.slice(0, 2000) } : {};
+});
+ipcMain.on('lifeos:notify', safeListener((event, input) => {
   assertDuckiesRenderer(event);
   if (!input || typeof input.title !== 'string') throw new Error('Invalid notification');
   showDesktopNotification(input.title, typeof input.body === 'string' ? input.body : '', input.tone);
-});
+}));
 // Mirrors every Windows toast (any app) into the island via the built-in WinRT notification listener.
 // The OS still shows its own corner toast: Windows has no public API to suppress other apps' toasts.
 let windowsNotifications;
@@ -156,7 +182,7 @@ function startWindowsNotifications() {
     // PowerShell can't read files inside app.asar, so stage the script in userData first.
     const script = path.join(app.getPath('userData'), 'windows-notifications.ps1');
     fs.writeFileSync(script, fs.readFileSync(path.join(__dirname, 'windows-notifications.ps1')));
-    windowsNotifications = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script], { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+    windowsNotifications = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-STA', '-ExecutionPolicy', 'Bypass', '-File', script], { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
   } catch (error) { console.error('Windows notification listener unavailable:', error); return; }
   let buffer = '';
   windowsNotifications.stdout.on('data', chunk => {

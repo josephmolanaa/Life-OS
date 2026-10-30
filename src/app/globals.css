@@ -73,13 +73,53 @@ body:has(.duckiesRoute) .floatingAiButton, body:has(.duckiesRoute) .floatingAiPa
 .islandActions button:active { scale: .94; }
 .islandActions button.primary { background: #30d158; color: #000; }
 .islandActions button.primary.blue { background: #64d2ff; }
-.islandWater { width: 280px; height: 10px; border-radius: 999px; background: rgba(255,255,255,.12); overflow: hidden; }
+.islandWater { width: 100%; height: 10px; border-radius: 999px; background: rgba(255,255,255,.12); overflow: hidden; }
 .islandWater i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #0a84ff, #64d2ff); transition: width .6s var(--spring); }
-.islandPet { height: 100%; display: flex; align-items: center; gap: 16px; padding: 0 12px; }
-
-.islandPet b { color: #ffd60a; }
-.islandPet p { margin: 4px 0 0; color: var(--mute); }
-.islandShelf { height: 100%; display: grid; place-items: center; align-content: center; gap: 8px; border: 1.5px dashed #3a3a3c; border-radius: 22px; color: var(--mute); text-align: center; }
+/* Timer / water: summary on the left, controls on the right, so everything fits the 560x230 panel. */
+.islandSplit { height: 100%; display: grid; grid-template-columns: 150px 1fr; align-items: center; gap: 20px; padding: 0 4px; }
+.islandSplit .islandDial { justify-self: center; }
+.islandControls { display: grid; gap: 9px; align-content: center; }
+.islandStepper { display: flex; align-items: center; gap: 8px; }
+.islandStepper button, .islandChips button, .islandChipRow button { border: 0; background: rgba(118,118,128,.24); color: #fff; cursor: pointer; transition: background .2s, scale .15s; }
+.islandStepper button { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; }
+.islandStepper label { display: inline-flex; align-items: baseline; gap: 5px; color: var(--mute); font-size: 12px; }
+.islandStepper input { width: 52px; padding: 4px 6px; border: 0; border-radius: 8px; background: rgba(118,118,128,.2); color: #fff; font: 600 18px/1.2 inherit; text-align: center; -moz-appearance: textfield; }
+.islandStepper input::-webkit-inner-spin-button, .islandStepper input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.islandChips { display: flex; flex-wrap: wrap; gap: 6px; }
+.islandChips button, .islandChipRow button { padding: 5px 11px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.islandChips button.blue { display: grid; justify-items: center; padding: 5px 12px; line-height: 1.15; background: rgba(100,210,255,.16); color: #64d2ff; }
+.islandChips button.blue small { color: var(--mute); font-size: 10px; font-weight: 500; }
+.islandChips button:hover, .islandChipRow button:hover, .islandStepper button:hover { background: rgba(118,118,128,.4); }
+.islandChips button.blue:hover { background: rgba(100,210,255,.26); }
+.islandChips button:active, .islandChipRow button:active, .islandStepper button:active { scale: .92; }
+.islandChips button.active, .islandChipRow button.active { background: #fff; color: #000; }
+.islandStepper button:disabled, .islandChips button:disabled, .islandStepper input:disabled { opacity: .4; cursor: default; }
+.islandChipRow { display: flex; align-items: center; gap: 5px; }
+.islandChipRow > span { width: 52px; color: var(--mute); font-size: 11px; }
+.islandWaterSummary { display: grid; gap: 10px; justify-items: start; }
+.islandWaterSummary strong { font-size: 26px; font-weight: 600; letter-spacing: -.02em; }
+.islandWaterSummary strong small { color: var(--mute); font-size: 12px; font-weight: 500; }
+.islandLink { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; background: none; color: var(--mute); font-size: 11px; cursor: pointer; }
+.islandLink:hover { color: #fff; }
+.islandPet { height: 100%; display: flex; align-items: center; gap: 18px; padding: 0 8px; }
+.islandPetPicker { display: grid; gap: 8px; }
+.islandPetPicker p { margin: 0; }
+.islandPetPicker > div { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.islandPetPicker button { display: grid; justify-items: center; gap: 2px; padding: 6px 4px; border: 0; border-radius: 12px; background: rgba(118,118,128,.16); color: var(--mute); font-size: 10px; cursor: pointer; transition: background .2s, color .2s, scale .15s; }
+.islandPetPicker button:hover { background: rgba(118,118,128,.3); color: #fff; }
+.islandPetPicker button:active { scale: .94; }
+.islandPetPicker button.active { background: rgba(255,214,10,.18); color: #ffd60a; box-shadow: inset 0 0 0 1px rgba(255,214,10,.5); }
+.islandShelf { height: 100%; display: grid; place-items: center; align-content: center; gap: 8px; border: 1.5px dashed #3a3a3c; border-radius: 22px; color: var(--mute); text-align: center; outline: none; transition: border-color .2s, background .2s; }
+.islandShelf:focus-visible, .islandShelf:focus { border-color: #64d2ff; background: rgba(100,210,255,.05); }
+.islandShelf.filled { place-items: stretch; align-content: start; padding: 8px; overflow: auto; scrollbar-width: none; }
+.islandShelf ul { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin: 0; padding: 0; list-style: none; }
+.islandShelf li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 12px; background: rgba(118,118,128,.16); text-align: left; }
+.islandShelf li img { width: 30px; height: 30px; flex: none; border-radius: 7px; object-fit: cover; }
+.islandShelf li > span { display: grid; min-width: 0; flex: 1; }
+.islandShelf li b { overflow: hidden; color: #fff; font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.islandShelf li small { color: var(--mute); font-size: 10px; }
+.islandShelf li button { width: 20px; height: 20px; display: grid; place-items: center; flex: none; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--mute); cursor: pointer; }
+.islandShelf li button:hover { background: rgba(255,69,58,.2); color: #ff453a; }
 @keyframes islandIn { from { opacity: 0; filter: blur(8px) brightness(.7); scale: .9; } to { opacity: 1; filter: none; scale: 1; } }
 @keyframes islandPop { from { scale: .4; opacity: 0; } to { scale: 1; opacity: 1; } }
 @keyframes islandGlow { 50% { filter: drop-shadow(0 0 4px #30d158); } }

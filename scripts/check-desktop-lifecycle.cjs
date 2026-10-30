@@ -20,6 +20,8 @@ function launch({ args = [], packaged = true, userData = tempDirectory('lifeos-t
   const windows = [];
   const settingsCalls = [];
   const spawned = [];
+  let clipboardReply = '{}';
+  const setClipboardReply = value => { clipboardReply = value; };
   const errors = [];
   let quits = 0;
   let loginSettings = { ...login };
@@ -110,7 +112,13 @@ function launch({ args = [], packaged = true, userData = tempDirectory('lifeos-t
     'node:crypto': require('node:crypto'),
     electron,
     'electron-updater': { autoUpdater: updater },
-    'node:child_process': { spawn: () => { const child = new EventEmitter(); child.stdout = new EventEmitter(); child.kill = () => { child.killed = true; }; spawned.push(child); return child; } },
+    'node:child_process': { spawn: (_cmd, args = []) => {
+      const child = new EventEmitter(); child.stdout = new EventEmitter(); child.kill = () => { child.killed = true; };
+      // The clipboard reader answers once and exits, like read-clipboard.ps1 after an Explorer "Copy".
+      if (args.some(arg => String(arg).endsWith('read-clipboard.ps1'))) { setImmediate(() => { child.stdout.emit('data', clipboardReply); child.emit('exit', 0); }); return child; }
+      spawned.push(child);
+      return child;
+    } },
     'node:fs': fs,
     'node:http': { get: (_url, callback) => { queueMicrotask(() => callback({ resume() {} })); return { setTimeout() {}, on() {} }; } },
     'node:path': path,
@@ -120,11 +128,11 @@ function launch({ args = [], packaged = true, userData = tempDirectory('lifeos-t
     require: (name) => modules[name],
     __dirname: path.join(__dirname, '..', 'electron'),
     process: { platform: 'win32', execPath: 'Life OS.exe', resourcesPath: 'resources', argv: ['Life OS.exe', ...args], env: {} },
-    console: { error: (...values) => errors.push(values), log() {} },
-    Buffer, URL, setTimeout, setImmediate, Date, setInterval, clearInterval,
+    console: { error: (...values) => errors.push(values), warn() {}, log() {} },
+    Buffer, URL, setTimeout, clearTimeout, setImmediate, Date, setInterval, clearInterval,
   }, { filename: 'electron/main.cjs' });
 
-  return { app, windows, settingsCalls, spawned, errors, updater, handlers, listeners, messages, get quits() { return quits; }, get readyCalls() { return readyCalls; }, userData, get tray() { return Tray.instance; } };
+  return { app, windows, settingsCalls, spawned, setClipboardReply, errors, updater, handlers, listeners, messages, get quits() { return quits; }, get readyCalls() { return readyCalls; }, userData, get tray() { return Tray.instance; } };
 }
 
 
@@ -298,18 +306,27 @@ async function checkUpdater() {
   assert.deepEqual(JSON.parse(JSON.stringify(notch.shape)), [{ x: 220, y: 0, width: 160, height: 36 }]);
   duckiesDesktop.listeners.get('lifeos:duckies-shape')(notchEvent, { x: 200, y: 0, width: 200, height: 60 });
   assert.deepEqual(JSON.parse(JSON.stringify(notch.shape)), [{ x: 200, y: 0, width: 200, height: 60 }]);
-  assert.throws(() => duckiesDesktop.listeners.get('lifeos:duckies-shape')({ sender: {}, senderFrame: {} }, { x: 0, y: 0, width: 10, height: 10 }), /Untrusted frame/);
-  assert.throws(() => duckiesDesktop.listeners.get('lifeos:duckies-shape')(notchEvent, { x: 0, y: 0, width: 900, height: 10 }), /Invalid Duckies shape/);
-  assert.throws(() => duckiesDesktop.listeners.get('lifeos:duckies-shape')(notchEvent, { x: 1.5, y: 0, width: 10, height: 10 }), /Invalid Duckies shape/);
+  assert.doesNotThrow(() => duckiesDesktop.listeners.get('lifeos:duckies-shape')({ sender: {}, senderFrame: {} }, { x: 0, y: 0, width: 10, height: 10 }));
+  assert.doesNotThrow(() => duckiesDesktop.listeners.get('lifeos:duckies-shape')(notchEvent, { x: 0, y: 0, width: 900, height: 10 }));
+  assert.doesNotThrow(() => duckiesDesktop.listeners.get('lifeos:duckies-shape')(notchEvent, { x: 1.5, y: 0, width: 10, height: 10 }));
   assert.throws(() => duckiesDesktop.handlers.get('lifeos:duckies-set-settings')(duckiesEvent, { enabled: 'yes' }), /Invalid Duckies settings/);
   assert.throws(() => duckiesDesktop.handlers.get('lifeos:duckies-set-settings')({ sender: {}, senderFrame: {} }, { enabled: false, notifications: false, sound: false }), /Untrusted frame/);
-  assert.throws(() => duckiesDesktop.listeners.get('lifeos:duckies-resize')(notchEvent, { height: 10, width: 640 }), /Invalid Duckies bounds/);
+  assert.doesNotThrow(() => duckiesDesktop.listeners.get('lifeos:duckies-resize')(notchEvent, { height: 10, width: 640 }));
+  // Shelf paste reads the OS clipboard in main: file name + size only, never contents.
+  const readClip = () => duckiesDesktop.handlers.get('lifeos:duckies-clipboard')(notchEvent).then(value => JSON.parse(JSON.stringify(value)));
+  duckiesDesktop.setClipboardReply('{"files":{"name":"report.pdf","size":2048}}');
+  assert.deepEqual(await readClip(), { files: [{ name: 'report.pdf', size: 2048 }] });
+  duckiesDesktop.setClipboardReply('{"image":{"size":305,"preview":"javascript:alert(1)"}}');
+  assert.deepEqual(await readClip(), {}, 'non-PNG previews are dropped');
+  duckiesDesktop.setClipboardReply('not json');
+  assert.deepEqual(await readClip(), {});
+  await assert.rejects(() => duckiesDesktop.handlers.get('lifeos:duckies-clipboard')(duckiesEvent), /Untrusted frame/);
   // Desktop notifications drop into the island while Duckies notifications are on.
   const toasts = () => duckiesDesktop.messages.filter(m => m.channel === 'lifeos:duckies-toast').map(m => m.state);
   duckiesDesktop.listeners.get('lifeos:notify')(duckiesEvent, { title: 'Reminder', body: 'Drink water', tone: 'evil' });
   assert.deepEqual(toasts(), [{ title: 'Reminder', body: 'Drink water', tone: 'green' }]);
-  assert.throws(() => duckiesDesktop.listeners.get('lifeos:notify')({ sender: {}, senderFrame: {} }, { title: 'x' }), /Untrusted frame/);
-  assert.throws(() => duckiesDesktop.listeners.get('lifeos:notify')(duckiesEvent, { title: 1 }), /Invalid notification/);
+  assert.doesNotThrow(() => duckiesDesktop.listeners.get('lifeos:notify')({ sender: {}, senderFrame: {} }, { title: 'x' }));
+  assert.doesNotThrow(() => duckiesDesktop.listeners.get('lifeos:notify')(duckiesEvent, { title: 1 }));
   await duckiesInvoke('duckies-set-settings', { enabled: true, notifications: false, sound: false });
   const shown = lastNotification;
   duckiesDesktop.listeners.get('lifeos:notify')(duckiesEvent, { title: 'Fallback', body: '' });
@@ -318,8 +335,9 @@ async function checkUpdater() {
   assert.equal(lastNotification.options.title, 'Fallback');
   await duckiesInvoke('duckies-set-settings', { enabled: false, notifications: false, sound: false });
   assert.equal(notch.destroyed, true);
-  assert.equal(desktop.spawned.length, 1, 'Windows notification listener started on open');
-  assert.equal(desktop.spawned[0].killed, true, 'Windows notification listener stopped on close');
+  // spawned[0] is the bundled Next server; the notification listener is the next process started.
+  assert.equal(duckiesDesktop.spawned.length, 2, 'Windows notification listener started on open');
+  assert.equal(duckiesDesktop.spawned[1].killed, true, 'Windows notification listener stopped on close');
   console.log('Desktop Duckies OK: settings persistence, window creation/destroy, bounds validation, sender trust.');
 
   const api = exposed.lifeOsUpdater;
