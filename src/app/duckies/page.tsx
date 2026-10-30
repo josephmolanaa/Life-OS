@@ -114,6 +114,42 @@ export default function DuckiesPage() {
     return () => observer.disconnect();
   }, [mode, toast?.id]);
   const timerActive = running || seconds < focusSeconds;
+  // The window hugs the pill. Grow it before the CSS spring expands (so nothing clips),
+  // shrink it only after the spring settles (so the collapse stays visible).
+  // Grows apply at once; shrinks wait for the spring to settle and for the cursor to leave,
+  // so the window never slides out from under a hovering cursor.
+  const islandRef = useRef<HTMLElement | null>(null);
+  const windowSize = useRef<[number, number]>([0, 0]);
+  const hovering = useRef(false);
+  const shrinkTimer = useRef<number | undefined>(undefined);
+  const target = useRef<[number, number]>([0, 0]);
+  const applyWindow = useCallback(() => {
+    const [w, h] = target.current;
+    if (!w || (w === windowSize.current[0] && h === windowSize.current[1])) return;
+    windowSize.current = [w, h];
+    window.lifeOsDuckies?.resize(h, w);
+  }, []);
+  const scheduleShrink = useCallback(() => {
+    window.clearTimeout(shrinkTimer.current);
+    shrinkTimer.current = window.setTimeout(() => { if (!hovering.current) applyWindow(); }, 560);
+  }, [applyWindow]);
+  useEffect(() => {
+    const width = mode === 'expanded' ? 560 : fit?.width;
+    const height = mode === 'expanded' ? 230 : fit?.height;
+    if (!width || !height) return;
+    target.current = [Math.ceil(width) + 4, Math.ceil(height) + 4];
+    const [w, h] = windowSize.current;
+    if (target.current[0] >= w && target.current[1] >= h) { window.clearTimeout(shrinkTimer.current); applyWindow(); }
+    else scheduleShrink();
+  }, [mode, fit, applyWindow, scheduleShrink]);
+  // Hover intent: a short dwell opens, a short grace keeps it open while the cursor wobbles out.
+  const hoverTimer = useRef<number | undefined>(undefined);
+  const hoverIn = () => { hovering.current = true; window.clearTimeout(hoverTimer.current); hoverTimer.current = window.setTimeout(() => setExpanded(true), 120); };
+  const hoverOut = () => { hovering.current = false; window.clearTimeout(hoverTimer.current); hoverTimer.current = window.setTimeout(() => {
+    // Windows fires a spurious mouseleave when the window resizes under a still cursor; trust :hover instead.
+    if (islandRef.current?.matches(':hover')) { hovering.current = true; return; }
+    setExpanded(false);
+  }, 220); if (!expanded) scheduleShrink(); };
   const compactKind = timerActive ? 'live' : quests.todos.length || water ? 'split' : 'idle';
   const dndLabel = dnd ? (id ? 'Matikan Jangan Ganggu' : 'Turn off Do Not Disturb') : (id ? 'Nyalakan Jangan Ganggu' : 'Turn on Do Not Disturb');
   const bell = <button type="button" className={`islandBell ${dnd ? 'on' : ''}`} onClick={event => { event.stopPropagation(); toggleDnd(); }} aria-pressed={dnd} aria-label={dndLabel} title={dndLabel}>{dnd ? <BellOff size={14} aria-hidden="true" /> : <Bell size={14} aria-hidden="true" />}</button>;
@@ -132,7 +168,7 @@ export default function DuckiesPage() {
     ['quests', id ? 'Quest' : 'Quests', CheckSquare], ['timer', id ? 'Fokus' : 'Focus', Clock], ['water', id ? 'Air' : 'Water', Droplets], ['pet', 'Pet', Cat], ['shelf', 'Shelf', FolderDown],
   ];
 
-  return <main className={`island ${mode}`} style={fit ? { width: fit.width, height: fit.height } : undefined} onMouseEnter={() => window.lifeOsDuckies?.setInteractive?.(true)} onMouseLeave={() => { window.lifeOsDuckies?.setInteractive?.(false); setExpanded(false); }}>
+  return <main ref={islandRef} className={`island ${mode}`} style={fit ? { width: fit.width, height: fit.height } : undefined} onMouseEnter={hoverIn} onMouseLeave={hoverOut}>
     {mode === 'compact' && compactKind === 'idle' && <div ref={node => { layer.current = node; }} className="islandLayer islandCompact idle">
       <button type="button" className="islandExpand" onClick={() => setExpanded(true)} aria-label={id ? 'Buka Duckies' : 'Open Duckies'}><PixelDuck /><span className="islandTime">{clock}</span></button>
       <span className="islandGap" aria-hidden="true" />

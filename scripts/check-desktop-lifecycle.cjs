@@ -68,6 +68,7 @@ function launch({ args = [], packaged = true, userData = tempDirectory('lifeos-t
     isDestroyed() { return this.destroyed; }
     close() { this.destroyed = true; this.emit('closed'); }
     setBounds(bounds) { this.bounds = bounds; }
+    getBounds() { return this.bounds || { x: this.options.x, y: this.options.y, width: this.options.width, height: this.options.height }; }
     setAlwaysOnTop() {}
     setVisibleOnAllWorkspaces() {}
     setIgnoreMouseEvents(ignore) { this.ignoreMouse = ignore; }
@@ -119,11 +120,12 @@ function launch({ args = [], packaged = true, userData = tempDirectory('lifeos-t
     __dirname: path.join(__dirname, '..', 'electron'),
     process: { platform: 'win32', execPath: 'Life OS.exe', resourcesPath: 'resources', argv: ['Life OS.exe', ...args], env: {} },
     console: { error: (...values) => errors.push(values), log() {} },
-    Buffer, URL, setTimeout, setImmediate, Date,
+    Buffer, URL, setTimeout, setImmediate, Date, setInterval, clearInterval,
   }, { filename: 'electron/main.cjs' });
 
   return { app, windows, settingsCalls, spawned, errors, updater, handlers, listeners, messages, get quits() { return quits; }, get readyCalls() { return readyCalls; }, userData, get tray() { return Tray.instance; } };
 }
+
 
 async function settle() { await new Promise((resolve) => setTimeout(resolve, 10)); }
 function menuItem(tray, label) { return tray.contextMenu.template.find((item) => item.label === label); }
@@ -277,10 +279,11 @@ async function checkUpdater() {
   duckiesDesktop.listeners.get('lifeos:duckies-resize')(notchEvent, { height: 190, width: 640 });
   assert.deepEqual(JSON.parse(JSON.stringify(notch.bounds)), { x: 640, y: 8, width: 640, height: 190 });
   assert.ok(typeof duckiesApi.onSettings === 'function');
-  assert.equal(notch.ignoreMouse, true);
-  duckiesDesktop.listeners.get('lifeos:duckies-interactive')(notchEvent, true);
-  assert.equal(notch.ignoreMouse, false);
-  assert.throws(() => duckiesDesktop.listeners.get('lifeos:duckies-interactive')({ sender: {}, senderFrame: {} }, true), /Untrusted frame/);
+  // Window hugs the pill: never click-through, so hover and clicks always reach it.
+  assert.equal(notch.ignoreMouse, undefined);
+  duckiesDesktop.listeners.get('lifeos:duckies-resize')(notchEvent, { height: 40, width: 76 });
+  assert.deepEqual(JSON.parse(JSON.stringify(notch.bounds)), { x: 922, y: 8, width: 76, height: 40 });
+  assert.throws(() => duckiesDesktop.listeners.get('lifeos:duckies-resize')({ sender: {}, senderFrame: {} }, { height: 40, width: 76 }), /Untrusted frame/);
   assert.throws(() => duckiesDesktop.handlers.get('lifeos:duckies-set-settings')(duckiesEvent, { enabled: 'yes' }), /Invalid Duckies settings/);
   assert.throws(() => duckiesDesktop.handlers.get('lifeos:duckies-set-settings')({ sender: {}, senderFrame: {} }, { enabled: false, notifications: false, sound: false }), /Untrusted frame/);
   assert.throws(() => duckiesDesktop.listeners.get('lifeos:duckies-resize')(notchEvent, { height: 10, width: 640 }), /Invalid Duckies bounds/);
