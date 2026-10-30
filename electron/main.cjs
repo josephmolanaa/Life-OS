@@ -95,6 +95,7 @@ ipcMain.handle('lifeos:duckies-set-settings', (event, input) => {
   if (!input || typeof input !== 'object' || typeof input.enabled !== 'boolean' || typeof input.notifications !== 'boolean' || typeof input.sound !== 'boolean') throw new Error('Invalid Duckies settings');
   const next = writeDuckiesSettings(input);
   if (next.enabled) createDuckiesWindow(); else closeDuckiesWindow();
+  if (duckiesWindow && !duckiesWindow.isDestroyed()) duckiesWindow.webContents.send('lifeos:duckies-settings-changed', next);
   return next;
 });
 ipcMain.on('lifeos:duckies-resize', (event, bounds) => { assertDuckiesWindow(event); resizeDuckies(bounds?.height, bounds?.width); });
@@ -105,17 +106,17 @@ function closeDuckiesWindow() {
 }
 function resizeDuckies(height, width) {
   if (!duckiesWindow || duckiesWindow.isDestroyed()) return;
-  if (!Number.isInteger(height) || !Number.isInteger(width) || height < 38 || height > 480 || width < 220 || width > 900) throw new Error('Invalid Duckies bounds');
+  if (!Number.isInteger(height) || !Number.isInteger(width) || height < 32 || height > 480 || width < 160 || width > 900) throw new Error('Invalid Duckies bounds');
   const { width: screenWidth } = require('electron').screen.getPrimaryDisplay().workAreaSize;
-  duckiesWindow.setBounds({ x: Math.round((screenWidth - width) / 2), y: 0, width, height });
+  duckiesWindow.setBounds({ x: Math.round((screenWidth - width) / 2), y: 8, width, height });
 }
 function createDuckiesWindow() {
   if (!app.isPackaged || !readDuckiesSettings().enabled || (duckiesWindow && !duckiesWindow.isDestroyed())) return;
   const { screen } = require('electron');
-  const width = 240;
-  const height = 38;
+  const width = 200;
+  const height = 36;
   const screenWidth = screen.getPrimaryDisplay().workAreaSize.width;
-  duckiesWindow = new BrowserWindow({ width, height, x: Math.round((screenWidth - width) / 2), y: 0, frame: false, transparent: true, alwaysOnTop: true, skipTaskbar: true, resizable: false, movable: false, focusable: true, hasShadow: false, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false } });
+  duckiesWindow = new BrowserWindow({ width, height, x: Math.round((screenWidth - width) / 2), y: 8, frame: false, transparent: true, alwaysOnTop: true, skipTaskbar: true, resizable: false, movable: false, focusable: true, hasShadow: false, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false } });
   duckiesWindow.setAlwaysOnTop(true, 'floating');
   duckiesWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   duckiesWindow.on('closed', () => { duckiesWindow = undefined; });

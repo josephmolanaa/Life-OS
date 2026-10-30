@@ -274,7 +274,8 @@ async function checkUpdater() {
   const notch = duckiesDesktop.windows[1];
   const notchEvent = { sender: notch.webContents, senderFrame: notch.webContents.mainFrame };
   duckiesDesktop.listeners.get('lifeos:duckies-resize')(notchEvent, { height: 190, width: 640 });
-  assert.deepEqual(JSON.parse(JSON.stringify(notch.bounds)), { x: 640, y: 0, width: 640, height: 190 });
+  assert.deepEqual(JSON.parse(JSON.stringify(notch.bounds)), { x: 640, y: 8, width: 640, height: 190 });
+  assert.ok(typeof duckiesApi.onSettings === 'function');
   assert.throws(() => duckiesDesktop.handlers.get('lifeos:duckies-set-settings')(duckiesEvent, { enabled: 'yes' }), /Invalid Duckies settings/);
   assert.throws(() => duckiesDesktop.handlers.get('lifeos:duckies-set-settings')({ sender: {}, senderFrame: {} }, { enabled: false, notifications: false, sound: false }), /Untrusted frame/);
   assert.throws(() => duckiesDesktop.listeners.get('lifeos:duckies-resize')(notchEvent, { height: 10, width: 640 }), /Invalid Duckies bounds/);

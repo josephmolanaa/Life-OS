@@ -1,11 +1,60 @@
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap');
 
-.duckiesRoute { min-height: 100vh; background: transparent; color: #fff; }
-.duckiesWidget { width: 240px; margin: 0 auto; color: #fff; font-family: 'JetBrains Mono', monospace; }
-.duckiesWidget.expanded { width: 640px; }
-.duckiesCompact { width: 100%; height: 38px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 14px; border: 1px solid rgba(255,255,255,.12); border-top: 0; border-radius: 0 0 16px 16px; background: rgba(10,10,10,.94); color: #fff; cursor: pointer; font-size: 11px; }
-.duckiesCompact b { color: #34d399; }.duckiesPanel { height: 190px; padding: 9px 12px; border: 1px solid rgba(255,255,255,.14); border-top: 0; border-radius: 0 0 18px 18px; background: rgba(10,10,10,.96); box-shadow: 0 18px 44px rgba(0,0,0,.35); }
-.duckiesPanel header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 7px; border-bottom: 1px solid rgba(255,255,255,.12); font-size: 11px; }.duckiesPanel nav { display: flex; gap: 3px; }.duckiesTab { width: 28px; height: 26px; display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: #a1a1aa; cursor: pointer; }.duckiesTab:hover,.duckiesTab.active { background: rgba(255,255,255,.14); color: #fff; }.duckiesContent { height: 148px; padding: 10px 2px 0; overflow: auto; font-size: 11px; }.duckiesMuted { margin: 0 0 8px; color: #a1a1aa; }.duckiesQuest { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 8px; margin-bottom: 4px; border-radius: 6px; background: rgba(255,255,255,.06); }.duckiesQuest span { min-width: 0; overflow-wrap: anywhere; }.duckiesCenter { height: 100%; display: grid; place-items: center; align-content: center; gap: 10px; }.duckiesTimer { font-size: 28px; letter-spacing: 1px; }.duckiesAction { border: 0; border-radius: 6px; padding: 7px 12px; margin: 0 3px; background: #059669; color: #fff; cursor: pointer; font-size: 11px; }.duckiesAction.secondary { background: #3f3f46; }.duckiesPet { display: flex; align-items: center; gap: 12px; height: 100%; padding: 0 22px; }.duckiesPet > span { font-size: 32px; }.duckiesPet b { color: #a5b4fc; }.duckiesPet p { margin: 4px 0 0; color: #a1a1aa; }.duckiesShelf { height: 100%; display: grid; place-items: center; align-content: center; gap: 7px; border: 1px dashed #52525b; border-radius: 8px; color: #a1a1aa; text-align: center; }.duckiesSettings { display: grid; gap: 14px; }.duckiesToggle { display: flex; grid-template-columns: auto 1fr; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border2); }.duckiesToggle:last-child { border-bottom: 0; }.duckiesToggle input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--green); }.duckiesToggle span { display: grid; gap: 2px; }.duckiesToggle small { color: var(--text2); }
+/* Duckies: Dynamic Island overlay. Window is sized to the island, so the pill fills it. */
+.duckiesRoute { height: 100vh; background: transparent; color: #f5f5f7; display: flex; justify-content: center; align-items: flex-start; }
+html:has(.duckiesRoute), body:has(.duckiesRoute) { overflow: hidden; scrollbar-width: none; }
+body:has(.duckiesRoute) .floatingAiButton, body:has(.duckiesRoute) .floatingAiPanel { display: none !important; }
+.island { --ink: #000; --mute: #8e8e93; width: 100%; height: 100vh; background: var(--ink); color: #f5f5f7; border-radius: 999px; overflow: hidden; font-family: 'JetBrains Mono', monospace; transition: border-radius .42s cubic-bezier(.32,.72,0,1); user-select: none; }
+.island.toast { border-radius: 32px; }
+.island.expanded { border-radius: 34px; }
+.island button { font: inherit; color: inherit; }
+.islandCompact { width: 100%; height: 100%; display: flex; align-items: center; gap: 9px; padding: 0 14px 0 10px; border: 0; background: transparent; cursor: pointer; font-size: 12px; }
+.islandRing { --p: 0; width: 16px; height: 16px; flex: 0 0 16px; border-radius: 50%; background: conic-gradient(#30d158 calc(var(--p) * 360deg), rgba(255,255,255,.16) 0); -webkit-mask: radial-gradient(circle, transparent 4.5px, #000 5px); mask: radial-gradient(circle, transparent 4.5px, #000 5px); }
+.islandRing.live { animation: islandPulse 2s ease-in-out infinite; }
+.islandTime { font-weight: 700; letter-spacing: .3px; font-variant-numeric: tabular-nums; }
+.islandMeta { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; color: #64d2ff; font-weight: 600; }
+.islandToast { height: 100%; display: flex; align-items: center; gap: 12px; padding: 0 18px 0 12px; animation: islandIn .38s cubic-bezier(.32,.72,0,1); }
+.islandToast div { display: grid; min-width: 0; }
+.islandToast b { font-size: 13px; }
+.islandToast small { color: var(--mute); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.islandToastIcon { width: 38px; height: 38px; flex: 0 0 38px; display: grid; place-items: center; border-radius: 50%; background: #30d158; color: #000; }
+.islandToast.blue .islandToastIcon { background: #64d2ff; }
+.islandToast.amber .islandToastIcon { background: #ffd60a; }
+.islandPanel { height: 100%; display: flex; flex-direction: column; padding: 14px 18px 16px; animation: islandIn .38s cubic-bezier(.32,.72,0,1); }
+.islandPanel header { display: flex; align-items: center; gap: 12px; }
+.islandPanel header strong { font-size: 13px; letter-spacing: .2px; }
+.islandPanel nav { display: flex; gap: 2px; margin: 0 auto; padding: 3px; border-radius: 999px; background: rgba(255,255,255,.08); }
+.islandPanel nav button { width: 32px; height: 26px; display: grid; place-items: center; border: 0; border-radius: 999px; background: transparent; color: var(--mute); cursor: pointer; transition: background .2s, color .2s; }
+.islandPanel nav button:hover { color: #f5f5f7; }
+.islandPanel nav button.active { background: rgba(255,255,255,.18); color: #f5f5f7; }
+.island button:focus-visible { outline: 2px solid #64d2ff; outline-offset: 2px; }
+.islandFlags { display: inline-flex; gap: 6px; color: #48484a; }
+.islandFlags .on { color: #30d158; }
+.islandBody { flex: 1; min-height: 0; margin-top: 12px; overflow: auto; font-size: 12px; }
+.islandMuted { margin: 0 0 8px; color: var(--mute); }
+.islandQuests label { display: flex; align-items: center; gap: 10px; padding: 7px 10px; margin-bottom: 4px; border-radius: 12px; background: rgba(255,255,255,.07); color: #f5f5f7; font-size: 12px; cursor: pointer; }
+.islandQuests label.done span { color: var(--mute); text-decoration: line-through; }
+.islandQuests input { width: 16px; height: 16px; margin: 0; accent-color: #30d158; }
+.islandQuests span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.islandCenter { height: 100%; display: grid; place-items: center; align-content: center; gap: 12px; }
+.islandDial { --p: 0; width: 92px; height: 92px; display: grid; place-items: center; border-radius: 50%; background: radial-gradient(circle, #000 60%, transparent 61%), conic-gradient(#30d158 calc(var(--p) * 360deg), rgba(255,255,255,.12) 0); }
+.islandDial strong { font-size: 20px; font-variant-numeric: tabular-nums; }
+.islandActions { display: flex; gap: 8px; }
+.islandActions button { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border: 0; border-radius: 999px; background: rgba(255,255,255,.12); cursor: pointer; font-size: 12px; font-weight: 600; }
+.islandActions button.primary { background: #30d158; color: #000; }
+.islandActions button.primary.blue { background: #64d2ff; }
+.islandWater { width: 260px; height: 10px; border-radius: 999px; background: rgba(255,255,255,.12); overflow: hidden; }
+.islandWater i { display: block; height: 100%; border-radius: inherit; background: #64d2ff; transition: width .4s cubic-bezier(.32,.72,0,1); }
+.islandPet { height: 100%; display: flex; align-items: center; gap: 14px; padding: 0 12px; }
+.islandPet > span { font-size: 40px; animation: islandBob 2.4s ease-in-out infinite; }
+.islandPet b { color: #ffd60a; }
+.islandPet p { margin: 4px 0 0; color: var(--mute); }
+.islandShelf { height: 100%; display: grid; place-items: center; align-content: center; gap: 8px; border: 1.5px dashed #3a3a3c; border-radius: 18px; color: var(--mute); text-align: center; }
+@keyframes islandIn { from { opacity: 0; transform: scale(.96); filter: blur(4px); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes islandPulse { 50% { opacity: .55; } }
+@keyframes islandBob { 50% { transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) { .island, .island * { animation: none !important; transition: none !important; } }
+.duckiesSettings { display: grid; gap: 14px; }.duckiesToggle { display: flex; grid-template-columns: auto 1fr; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border2); }.duckiesToggle:last-child { border-bottom: 0; }.duckiesToggle input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--green); }.duckiesToggle span { display: grid; gap: 2px; }.duckiesToggle small { color: var(--text2); }
 
 
 @tailwind base;

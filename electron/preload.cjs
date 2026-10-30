@@ -15,6 +15,11 @@ contextBridge.exposeInMainWorld('lifeOsDuckies', {
   getSettings: () => ipcRenderer.invoke('lifeos:duckies-settings'),
   setSettings: settings => ipcRenderer.invoke('lifeos:duckies-set-settings', settings),
   resize: (height, width) => ipcRenderer.send('lifeos:duckies-resize', { height, width }),
+  onSettings: (listener) => {
+    const handler = (_event, settings) => listener(settings);
+    ipcRenderer.on('lifeos:duckies-settings-changed', handler);
+    return () => ipcRenderer.removeListener('lifeos:duckies-settings-changed', handler);
+  },
 });
 
 contextBridge.exposeInMainWorld('lifeOsUpdater', {

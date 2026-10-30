@@ -29,12 +29,12 @@ export function DuckiesSettings({ lang }: { lang: 'id' | 'en' }) {
     <div className="settingsSectionHeader"><div><span className="pill">Duckies</span><h2>Floating widget</h2><p className="muted noMargin">{desktop ? (id ? 'Widget desktop di atas layar.' : 'Desktop overlay above your screen.') : (id ? 'Aktifkan dari aplikasi desktop.' : 'Enable it from the desktop app.')}</p></div></div>
     <div className="settingsStack">
       <label className="duckiesToggle"><input type="checkbox" checked={settings.enabled} disabled={busy || !desktop} onChange={event => void update({ enabled: event.target.checked })} /><span><b>{id ? 'Aktifkan Duckies' : 'Enable Duckies'}</b><small>{id ? 'Tampilkan widget floating saat desktop dibuka.' : 'Show the floating widget when desktop starts.'}</small></span></label>
-      <label className="duckiesToggle"><input type="checkbox" checked={settings.notifications} disabled={busy || !desktop} onChange={event => void update({ notifications: event.target.checked })} /><span><b>{id ? 'Notifikasi Duckies' : 'Duckies notifications'}</b><small>{id ? 'Simpan preferensi notifikasi lokal.' : 'Keep notification preference local.'}</small></span></label>
-      <label className="duckiesToggle"><input type="checkbox" checked={settings.sound} disabled={busy || !desktop} onChange={event => void update({ sound: event.target.checked })} /><span><b>{id ? 'Suara Duckies' : 'Duckies sound'}</b><small>{id ? 'Aktifkan suara widget saat tersedia.' : 'Enable widget sounds when available.'}</small></span></label>
+      <label className="duckiesToggle"><input type="checkbox" checked={settings.notifications} disabled={busy || !desktop} onChange={event => void update({ notifications: event.target.checked })} /><span><b>{id ? 'Notifikasi Duckies' : 'Duckies notifications'}</b><small>{id ? 'Island membesar sebentar saat fokus selesai, quest beres, atau target air tercapai.' : 'The island expands briefly when focus ends, a quest is done, or the water goal is hit.'}</small></span></label>
+      <label className="duckiesToggle"><input type="checkbox" checked={settings.sound} disabled={busy || !desktop} onChange={event => void update({ sound: event.target.checked })} /><span><b>{id ? 'Suara Duckies' : 'Duckies sound'}</b><small>{id ? 'Bunyi chime pendek bersama notifikasi Duckies.' : 'Play a short chime with Duckies alerts.'}</small></span></label>
     </div>
   </section>;
 }
 
 declare global {
-  interface Window { lifeOsDuckies?: { getSettings: () => Promise<Settings>; setSettings: (settings: Settings) => Promise<Settings>; resize: (height: number, width: number) => void } }
+  interface Window { lifeOsDuckies?: { getSettings: () => Promise<Settings>; setSettings: (settings: Settings) => Promise<Settings>; resize: (height: number, width: number) => void; onSettings?: (listener: (settings: Settings) => void) => () => void } }
 }
