@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -54,4 +56,45 @@ export async function POST(request: Request) {
   if (error?.code === '23505') return NextResponse.json({ error: 'A schedule with this code already exists' }, { status: 409 });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data, { status: 201 });
+}
+
+export async function PATCH(request: Request) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const params = new URL(request.url).searchParams;
+  const id = params.get('id');
+  if (!id) return NextResponse.json({ error: 'Schedule ID is required' }, { status: 400 });
+
+  let body: unknown;
+  try { body = await request.json(); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+
+  const allowedFields = ['code', 'course', 'day', 'sessions', 'time', 'room', 'lecturer', 'semester'] as const;
+  type AllowedField = typeof allowedFields[number];
+  const updates: Record<string, string | null> = {};
+  const bodyObj = body as Record<AllowedField, unknown>;
+  for (const field of allowedFields) {
+    if (bodyObj[field] !== undefined) updates[field] = bodyObj[field] === null ? null : String(bodyObj[field]);
+  }
+  if (!Object.keys(updates).length) return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
+
+  const { data, error } = await supabase.from('study_schedule').update({ ...updates, updated_at: new Date().toISOString() }).eq('id', id).eq('user_id', user.id).select().single();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data);
+}
+
+export async function DELETE(request: Request) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const params = new URL(request.url).searchParams;
+  const id = params.get('id');
+  if (!id) return NextResponse.json({ error: 'Schedule ID is required' }, { status: 400 });
+
+  const { error } = await supabase.from('study_schedule').delete().eq('id', id).eq('user_id', user.id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ ok: true });
 }

@@ -9,6 +9,7 @@ type StudyItem = {
   time?: string | null;
   room?: string | null;
   lecturer?: string | null;
+  semester?: string | null;
 };
 
 export default async function JadwalPage() {
