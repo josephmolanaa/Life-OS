@@ -310,6 +310,13 @@ async function checkUpdater() {
   assert.doesNotThrow(() => duckiesDesktop.listeners.get('lifeos:duckies-shape')(notchEvent, { x: 0, y: 0, width: 900, height: 10 }));
   assert.doesNotThrow(() => duckiesDesktop.listeners.get('lifeos:duckies-shape')(notchEvent, { x: 1.5, y: 0, width: 10, height: 10 }));
   assert.throws(() => duckiesDesktop.handlers.get('lifeos:duckies-set-settings')(duckiesEvent, { enabled: 'yes' }), /Invalid Duckies settings/);
+  // Notification allow-list: validated, de-duplicated, offered back through known-apps.
+  assert.throws(() => duckiesDesktop.handlers.get('lifeos:duckies-set-settings')(duckiesEvent, { enabled: true, notifications: true, sound: false, allowedApps: [42] }), /Invalid Duckies settings/);
+  const filtered = await duckiesInvoke('duckies-set-settings', { enabled: true, notifications: true, sound: false, allowedApps: ['Discord', 'Discord', 'Life OS'] });
+  assert.deepEqual(JSON.parse(JSON.stringify(filtered)).allowedApps, ['Discord', 'Life OS']);
+  const knownApps = await duckiesInvoke('duckies-known-apps');
+  assert.ok(knownApps.includes('Discord') && knownApps.includes('Life OS'));
+  await duckiesInvoke('duckies-set-settings', { enabled: true, notifications: true, sound: false });
   assert.throws(() => duckiesDesktop.handlers.get('lifeos:duckies-set-settings')({ sender: {}, senderFrame: {} }, { enabled: false, notifications: false, sound: false }), /Untrusted frame/);
   assert.doesNotThrow(() => duckiesDesktop.listeners.get('lifeos:duckies-resize')(notchEvent, { height: 10, width: 640 }));
   // Shelf paste reads the OS clipboard in main: file name + size only, never contents.

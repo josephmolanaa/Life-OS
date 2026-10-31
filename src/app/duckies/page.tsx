@@ -274,15 +274,26 @@ export default function DuckiesPage() {
         </span>
       </header>
       <div className="islandBody">
-        {tab === 'tasks' && <div className="islandQuests">
-          <p className="islandMuted">Todoist · {openTasks.length} {id ? 'tugas terbuka' : 'open tasks'}</p>
-          <form className="islandAdd" onSubmit={event => { event.preventDefault(); const label = draft.trim(); if (!label || todoist.busy) return; setDraft(''); void todoist.onAdd(label); }}>
-            <input type="text" value={draft} maxLength={120} placeholder={id ? 'Tambah ke Inbox…' : 'Add to Inbox…'} disabled={todoist.busy} onChange={event => setDraft(event.target.value)} aria-label={id ? 'Tugas baru untuk Inbox' : 'New Inbox task'} />
-            <button type="submit" className="primary" disabled={todoist.busy || !draft.trim()}>{id ? 'Tambah' : 'Add'}</button>
+        {tab === 'tasks' && <div className="macReminders">
+          <div className="macRemindersHead">
+            <span className="macRemindersDot" aria-hidden="true" />
+            <b>Inbox</b>
+            <span className="macRemindersCount">{openTasks.length}</span>
+          </div>
+          <ul className="macRemindersList">
+            {openTasks.slice(0, 5).map(item => <li key={item.id}>
+              <button type="button" className={`macCheck ${(item.priority || 'MEDIUM').toLowerCase()}`} disabled={todoist.busy} onClick={() => void toggleTask(item.id, true)} aria-label={`${id ? 'Selesaikan' : 'Complete'} ${item.label}`} />
+              <span className="macRemindersText"><span>{item.label}</span>{item.due_date && <small>{new Date(`${item.due_date}T12:00:00`).toLocaleDateString(id ? 'id-ID' : 'en-US', { day: 'numeric', month: 'short' })}{item.due_time ? ` · ${item.due_time.slice(0, 5)}` : ''}</small>}</span>
+              <button type="button" className="macRemindersDelete" disabled={todoist.busy} onClick={() => void todoist.onDelete(item.id)} aria-label={`${id ? 'Hapus' : 'Delete'} ${item.label}`}><X size={12} aria-hidden="true" /></button>
+            </li>)}
+            {openTasks.length > 5 && <li className="macRemindersMore">+{openTasks.length - 5} {id ? 'lainnya di Life OS' : 'more in Life OS'}</li>}
+          </ul>
+          {!todoist.loading && !openTasks.length && <p className="macRemindersEmpty">{id ? 'Semua beres.' : 'All done.'}</p>}
+          {todoist.error && <p role="alert" className="macRemindersEmpty">{todoist.error}</p>}
+          <form className="macRemindersAdd" onSubmit={event => { event.preventDefault(); const label = draft.trim(); if (!label || todoist.busy) return; setDraft(''); void todoist.onAdd(label); }}>
+            <Plus size={14} aria-hidden="true" />
+            <input type="text" value={draft} maxLength={120} placeholder={id ? 'Pengingat baru' : 'New Reminder'} disabled={todoist.busy} onChange={event => setDraft(event.target.value)} aria-label={id ? 'Tugas baru untuk Inbox' : 'New Inbox task'} />
           </form>
-          {openTasks.slice(0, 4).map(item => <label key={item.id}><input type="checkbox" checked={false} disabled={todoist.busy} onChange={event => void toggleTask(item.id, event.target.checked)} /><span>{item.label}</span>{item.due_date && <small className="islandMuted">{item.due_date}</small>}</label>)}
-          {todoist.error && <p role="alert" className="islandMuted">{todoist.error}</p>}
-          {!todoist.loading && !openTasks.length && <p className="islandMuted">{id ? 'Inbox kosong.' : 'Inbox is empty.'}</p>}
         </div>}
         {tab === 'timer' && <div className="islandSplit">
           <div className="islandDial" style={{ ['--p' as string]: progress }}><strong>{format(seconds)}</strong></div>

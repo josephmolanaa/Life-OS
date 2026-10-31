@@ -85,6 +85,11 @@ function assertSettingsRenderer(event) {
   assertDuckiesRenderer(event);
 }
 
+// Apps seen in Windows toasts this session, plus common ones, so Settings can offer them before they ever notify.
+const knownNotificationApps = new Set(['Discord', 'WhatsApp', 'Telegram', 'Google Chrome', 'Microsoft Edge', 'Spotify', 'Slack', 'Microsoft Teams', 'Outlook', 'Visual Studio Code', 'Steam']);
+const duckiesAllows = app => { const list = readDuckiesSettings().allowedApps; return !Array.isArray(list) || list.includes(app); };
+ipcMain.handle('lifeos:duckies-known-apps', event => { assertSettingsRenderer(event); return [...new Set([...knownNotificationApps, ...(readDuckiesSettings().allowedApps || [])])].sort((a, b) => a.localeCompare(b)); });
+
 function openDuckiesIfEnabled() {
   if (readDuckiesSettings().enabled) createDuckiesWindow();
 }
@@ -93,7 +98,10 @@ ipcMain.handle('lifeos:duckies-settings', event => { assertSettingsRenderer(even
 ipcMain.handle('lifeos:duckies-set-settings', (event, input) => {
   assertSettingsRenderer(event);
   if (!input || typeof input !== 'object' || typeof input.enabled !== 'boolean' || typeof input.notifications !== 'boolean' || typeof input.sound !== 'boolean') throw new Error('Invalid Duckies settings');
-  const next = writeDuckiesSettings(input);
+  // allowedApps: optional allow-list of Windows app names; absent = every app may reach the island.
+  if (input.allowedApps !== undefined && (!Array.isArray(input.allowedApps) || input.allowedApps.length > 200 || !input.allowedApps.every(name => typeof name === 'string' && name.length > 0 && name.length <= 80))) throw new Error('Invalid Duckies settings');
+  const { enabled, notifications, sound, allowedApps } = input;
+  const next = writeDuckiesSettings(allowedApps ? { enabled, notifications, sound, allowedApps: [...new Set(allowedApps)] } : { enabled, notifications, sound });
   if (next.enabled) createDuckiesWindow(); else closeDuckiesWindow();
   if (duckiesWindow && !duckiesWindow.isDestroyed()) duckiesWindow.webContents.send('lifeos:duckies-settings-changed', next);
   return next;
@@ -116,7 +124,7 @@ ipcMain.on('lifeos:duckies-shape', safeListener((event, rect) => {
 // Every Life OS desktop notification drops into the island when Duckies is on; the OS toast is the fallback.
 function showDesktopNotification(title, body, tone = 'green', onClick) {
   const toast = { title: String(title || 'Life OS').slice(0, 80), body: String(body || '').slice(0, 160), tone: ['green', 'blue', 'amber'].includes(tone) ? tone : 'green' };
-  if (duckiesWindow && !duckiesWindow.isDestroyed() && readDuckiesSettings().notifications) {
+  if (duckiesWindow && !duckiesWindow.isDestroyed() && readDuckiesSettings().notifications && duckiesAllows('Life OS')) {
     duckiesWindow.webContents.send('lifeos:duckies-toast', toast);
     return;
   }
@@ -194,6 +202,8 @@ function startWindowsNotifications() {
       let item;
       try { item = JSON.parse(line); } catch { continue; }
       if (item?.type !== 'toast' || !duckiesWindow || duckiesWindow.isDestroyed() || !readDuckiesSettings().notifications) continue;
+      if (item.app) knownNotificationApps.add(String(item.app).slice(0, 80));
+      if (!duckiesAllows(String(item.app || 'Windows'))) continue;
       const title = String(item.title || item.app || 'Windows').slice(0, 80);
       if (item.app === 'Discord') {
         // Discord: avatar + username + "N New Messages", like its own toast.

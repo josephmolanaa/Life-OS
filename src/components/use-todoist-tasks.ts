@@ -60,5 +60,6 @@ export function useTodoistTasks(lang: Lang) {
     tasks, loading, busy, error,
     onAdd: (label: string) => save('POST', undefined, { label, list_kind: 'task', priority: 'MEDIUM' }),
     onToggle: (id: string, done: boolean) => save('PUT', id, { done }),
+    onDelete: (id: string) => save('DELETE', id),
   };
 }
