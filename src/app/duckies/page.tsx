@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { CheckSquare, Clock, Droplets, Cat, FolderDown, Pause, Play, RotateCcw, Minus, Plus, Bell, BellOff, Volume2, VolumeX, X, FileText } from 'lucide-react';
-import { useDailyQuests } from '@/components/use-daily-quests';
+import { useTodoistTasks } from '@/components/use-todoist-tasks';
+import { duckiesDisplayKey, formatCountdown, readDuckiesDisplay, type DuckiesDisplay } from '@/lib/duckies-display';
 import { getLang, type Lang } from '@/lib/i18n';
 import { PixelDuck, duckScenes, type DuckScene } from '@/components/pixel-duck';
 
-type Tab = 'quests' | 'timer' | 'water' | 'pet' | 'shelf';
+type Tab = 'tasks' | 'timer' | 'water' | 'pet' | 'shelf';
 type Settings = { enabled: boolean; notifications: boolean; sound: boolean };
 type Toast = { id: number; title: string; body: string; tone: 'green' | 'blue' | 'amber' | 'discord'; image?: string };
 type ShelfItem = { id: number; name: string; detail: string; url?: string; text?: string };
@@ -69,7 +70,7 @@ function chime(tone: Toast['tone']) {
 export default function DuckiesPage() {
   const [lang, setLang] = useState<Lang>('en');
   const [expanded, setExpanded] = useState(false);
-  const [tab, setTab] = useState<Tab>('quests');
+  const [tab, setTab] = useState<Tab>('tasks');
   const [focusMinutes, setFocusMinutes] = useState(25);
   const [seconds, setSeconds] = useState(25 * 60);
   const [running, setRunning] = useState(false);
@@ -81,22 +82,13 @@ export default function DuckiesPage() {
   const [settings, setSettings] = useState<Settings>({ enabled: true, notifications: false, sound: false });
   const [toast, setToast] = useState<Toast | null>(null);
   const [dnd, setDnd] = useState(false);
-  const [clock, setClock] = useState('');
   const [draft, setDraft] = useState('');
-const countdownTarget = new Date('2030-03-18T00:00:00').getTime();
-const countdown = () => {
-  const left = countdownTarget - Date.now();
-  if (left <= 0) return '0 0 0 0';
-  const ms = left % 1000; const s = Math.floor((left / 1000) % 60); const m = Math.floor((left / 1000 / 60) % 60);
-  const h = Math.floor((left / 1000 / 60 / 60) % 24); const d = Math.floor((left / 1000 / 60 / 60 / 24) % 30);
-  const mo = Math.floor((left / 1000 / 60 / 60 / 24 / 30) % 12); const y = Math.floor(left / 1000 / 60 / 60 / 24 / 30 / 12);
-  return `${y} ${mo} ${d} ${h}`;
-};
-const [countDownText, setCountDownText] = useState(countdown());
+  const [display, setDisplay] = useState<DuckiesDisplay>(() => readDuckiesDisplay(null));
+  const [now, setNow] = useState(() => new Date());
   const toastTimer = useRef<number | undefined>(undefined);
-  const quests = useDailyQuests(lang);
+  const todoist = useTodoistTasks(lang);
   const id = lang === 'id';
-  const done = quests.todos.filter(item => item.done).length;
+  const openTasks = todoist.tasks.filter(item => !item.done);
 
   useEffect(() => {
     getLang().then(setLang);
@@ -118,15 +110,15 @@ const [countDownText, setCountDownText] = useState(countdown());
     const savedPet = localStorage.getItem('lifeos-duckies-pet');
     if (duckScenes.includes(savedPet as DuckScene)) setPet(savedPet as DuckScene);
     // Desktop clock in the system locale; a string state skips re-renders until the minute changes.
-    const tick = () => setClock(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-    tick();
-    const clockTimer = window.setInterval(tick, 5000);
+    setDisplay(readDuckiesDisplay(localStorage.getItem(duckiesDisplayKey)));
+    const onStorage = (event: StorageEvent) => { if (event.key === duckiesDisplayKey) setDisplay(readDuckiesDisplay(event.newValue)); };
+    window.addEventListener('storage', onStorage);
+    const clockTimer = window.setInterval(() => setNow(new Date()), 5000);
     const offSettings = window.lifeOsDuckies?.onSettings?.(setSettings);
-    return () => { window.clearInterval(clockTimer); offSettings?.(); };
+    return () => { window.clearInterval(clockTimer); window.removeEventListener('storage', onStorage); offSettings?.(); };
   }, []);
   const toggleDnd = () => setDnd(value => { localStorage.setItem('lifeos-duckies-dnd', value ? '0' : '1'); return !value; });
   useEffect(() => { localStorage.setItem('lifeos-duckies-state', JSON.stringify({ seconds, water, day: new Date().toDateString() })); }, [seconds, water]);
-useEffect(() => { const t = setInterval(() => setCountDownText(countdown()), 1000); return () => clearInterval(t); }, []);
 
   const notify = useCallback((next: Omit<Toast, 'id'>) => {
     if (dnd) return;
@@ -200,7 +192,8 @@ useEffect(() => { const t = setInterval(() => setCountDownText(countdown()), 100
   if (toast) lastToast.current = toast;
   const [compactSize, setCompactSize] = useState<[number, number]>([160, 36]);
   const [toastSize, setToastSize] = useState<[number, number]>([300, 64]);
-  const compactKind = timerActive ? 'live' : quests.todos.length || water ? 'split' : 'idle';
+  const compactKind = timerActive ? 'live' : 'idle';
+  const center = display.mode === 'clock' ? now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : formatCountdown(new Date(display.target), now);
   // Re-bind on compactKind: idle and split/live are different nodes, so a stale observer would read a detached node as 0x0.
   useLayoutEffect(() => {
     const watch = (node: HTMLElement | null, set: (size: [number, number]) => void) => {
@@ -246,16 +239,16 @@ useEffect(() => { const t = setInterval(() => setCountDownText(countdown()), 100
     if (value < waterGoal && next >= waterGoal) notify({ title: id ? 'Target air tercapai' : 'Water goal reached', body: `${next} / ${waterGoal} ml`, tone: 'blue' });
     return next;
   });
-  const toggleQuest = async (questId: string, checked: boolean) => {
-    if (await quests.onToggle(questId, checked) && checked) notify({ title: id ? 'Quest selesai' : 'Quest complete', body: `${done + 1}/${quests.todos.length} ${id ? 'hari ini' : 'today'}`, tone: 'amber' });
+  const toggleTask = async (taskId: string, checked: boolean) => {
+    if (await todoist.onToggle(taskId, checked) && checked) notify({ title: id ? 'Tugas selesai' : 'Task done', body: `${openTasks.length - 1} ${id ? 'tugas tersisa' : 'tasks left'}`, tone: 'amber' });
   };
   const tabs: [Tab, string, typeof CheckSquare][] = [
-    ['quests', id ? 'Quest' : 'Quests', CheckSquare], ['timer', id ? 'Fokus' : 'Focus', Clock], ['water', id ? 'Air' : 'Water', Droplets], ['pet', 'Pet', Cat], ['shelf', 'Shelf', FolderDown],
+    ['tasks', 'Todoist', CheckSquare], ['timer', id ? 'Fokus' : 'Focus', Clock], ['water', id ? 'Air' : 'Water', Droplets], ['pet', 'Pet', Cat], ['shelf', 'Shelf', FolderDown],
   ];
 
   return <main ref={islandRef} className={`island ${mode}`} style={{ width, height }} onMouseEnter={hoverIn} onMouseLeave={hoverOut}>
     {compactKind === 'idle' && <div ref={node => { compactRef.current = node; }} className={`islandLayer islandCompact idle ${mode === 'compact' ? 'on' : ''}`} aria-hidden={mode !== 'compact'}>
-      <button type="button" className="islandExpand" onClick={() => setExpanded(true)} aria-label={id ? 'Buka Duckies' : 'Open Duckies'}><PixelDuck scene={pet} /><span className="islandTime red">{countDownText}</span></button>
+      <button type="button" className="islandExpand" onClick={() => setExpanded(true)} aria-label={id ? 'Buka Duckies' : 'Open Duckies'}><PixelDuck scene={pet} /><span className={`islandTime ${display.mode === 'countdown' ? 'red' : ''}`}>{center}</span></button>
       {bell}
     </div>}
     {compactKind !== 'idle' && <button ref={node => { compactRef.current = node; }} type="button" className={`islandLayer islandCompact ${compactKind} ${mode === 'compact' ? 'on' : ''}`} aria-hidden={mode !== 'compact'} tabIndex={mode === 'compact' ? 0 : -1} onClick={() => setExpanded(true)} aria-label={id ? 'Buka Duckies' : 'Open Duckies'}>
@@ -264,11 +257,7 @@ useEffect(() => { const t = setInterval(() => setCountDownText(countdown()), 100
         <span className={`islandRing ${running ? 'live' : ''}`} style={{ ['--p' as string]: progress }} aria-hidden="true" />
         <span className="islandGap" aria-hidden="true" />
         <span className="islandTime green">{format(seconds)}</span>
-      </> : quests.todos.length || water ? <>
-        {quests.todos.length ? <span className="islandLead"><span className="islandRing" style={{ ['--p' as string]: done / quests.todos.length }} aria-hidden="true" /><span className="islandTime">{done}/{quests.todos.length}</span></span> : <PixelDuck scene={pet} />}
-        <span className="islandGap" aria-hidden="true" />
-        {water ? <span className="islandMeta"><Droplets size={12} aria-hidden="true" />{(water / 1000).toFixed(1)}L</span> : <PixelDuck scene={pet} />}
-      </> : <> <span className="islandLead"><span className="islandRing" style={{ ['--p' as string]: 0 }} aria-hidden="true" /><span className="islandTime red">{countDownText}</span></span> </>}
+      </> : null}
     </button>}
 
     <div ref={toastRef} className={`islandLayer islandToast ${lastToast.current?.tone ?? 'green'} ${mode === 'toast' ? 'on' : ''}`} role="status" aria-live="polite">
@@ -285,15 +274,15 @@ useEffect(() => { const t = setInterval(() => setCountDownText(countdown()), 100
         </span>
       </header>
       <div className="islandBody">
-        {tab === 'quests' && <div className="islandQuests">
-          <p className="islandMuted">{id ? 'Quest hari ini' : 'Today’s quests'} · {done}/{quests.todos.length}</p>
-          <form className="islandAdd" onSubmit={event => { event.preventDefault(); const label = draft.trim(); if (!label || quests.busy) return; setDraft(''); void quests.onAdd(label); }}>
-            <input type="text" value={draft} maxLength={120} placeholder={id ? 'Tambah quest…' : 'Add a quest…'} disabled={quests.busy} onChange={event => setDraft(event.target.value)} aria-label={id ? 'Nama quest baru' : 'New quest name'} />
-            <button type="submit" className="primary" disabled={quests.busy || !draft.trim()}>{id ? 'Add' : 'Add'}</button>
+        {tab === 'tasks' && <div className="islandQuests">
+          <p className="islandMuted">Todoist · {openTasks.length} {id ? 'tugas terbuka' : 'open tasks'}</p>
+          <form className="islandAdd" onSubmit={event => { event.preventDefault(); const label = draft.trim(); if (!label || todoist.busy) return; setDraft(''); void todoist.onAdd(label); }}>
+            <input type="text" value={draft} maxLength={120} placeholder={id ? 'Tambah ke Inbox…' : 'Add to Inbox…'} disabled={todoist.busy} onChange={event => setDraft(event.target.value)} aria-label={id ? 'Tugas baru untuk Inbox' : 'New Inbox task'} />
+            <button type="submit" className="primary" disabled={todoist.busy || !draft.trim()}>{id ? 'Tambah' : 'Add'}</button>
           </form>
-          {quests.todos.slice(0, 4).map(item => <label key={item.id} className={item.done ? 'done' : ''}><input type="checkbox" checked={item.done} disabled={quests.busy} onChange={event => void toggleQuest(item.id, event.target.checked)} /><span>{item.label}</span></label>)}
-          {quests.error && <p role="alert" className="islandMuted">{quests.error}</p>}
-          {!quests.loading && !quests.todos.length && <p className="islandMuted">{id ? 'Belum ada quest hari ini.' : 'No quests today.'}</p>}
+          {openTasks.slice(0, 4).map(item => <label key={item.id}><input type="checkbox" checked={false} disabled={todoist.busy} onChange={event => void toggleTask(item.id, event.target.checked)} /><span>{item.label}</span>{item.due_date && <small className="islandMuted">{item.due_date}</small>}</label>)}
+          {todoist.error && <p role="alert" className="islandMuted">{todoist.error}</p>}
+          {!todoist.loading && !openTasks.length && <p className="islandMuted">{id ? 'Inbox kosong.' : 'Inbox is empty.'}</p>}
         </div>}
         {tab === 'timer' && <div className="islandSplit">
           <div className="islandDial" style={{ ['--p' as string]: progress }}><strong>{format(seconds)}</strong></div>

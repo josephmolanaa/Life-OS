@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { defaultDuckiesDisplay, duckiesDisplayKey, readDuckiesDisplay, type DuckiesDisplay } from '@/lib/duckies-display';
 
 type Settings = { enabled: boolean; notifications: boolean; sound: boolean };
 const defaults: Settings = { enabled: false, notifications: false, sound: false };
@@ -11,7 +12,14 @@ export function DuckiesSettings({ lang }: { lang: 'id' | 'en' }) {
   const [settings, setSettings] = useState<Settings>(defaults);
   const [desktop, setDesktop] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [display, setDisplay] = useState<DuckiesDisplay>(defaultDuckiesDisplay);
+  const saveDisplay = (patch: Partial<DuckiesDisplay>) => {
+    const next = { ...display, ...patch };
+    setDisplay(next);
+    localStorage.setItem(duckiesDisplayKey, JSON.stringify(next));
+  };
   useEffect(() => {
+    setDisplay(readDuckiesDisplay(localStorage.getItem(duckiesDisplayKey)));
     const bridge = window.lifeOsDuckies;
     setDesktop(Boolean(bridge));
     if (bridge) bridge.getSettings().then(setSettings).catch(() => setSettings(defaults));
@@ -40,6 +48,15 @@ export function DuckiesSettings({ lang }: { lang: 'id' | 'en' }) {
       {toggle('enabled', id ? 'Aktifkan Duckies' : 'Enable Duckies', id ? 'Tampilkan widget floating saat desktop dibuka.' : 'Show the floating widget when desktop starts.')}
       {toggle('notifications', id ? 'Notifikasi Duckies' : 'Duckies notifications', id ? 'Island membesar sebentar saat fokus selesai, quest beres, atau target air tercapai.' : 'The island expands briefly when focus ends, a quest is done, or the water goal is hit.')}
       {toggle('sound', id ? 'Suara Duckies' : 'Duckies sound', id ? 'Bunyi chime pendek bersama notifikasi Duckies.' : 'Play a short chime with Duckies alerts.')}
+      <fieldset className="duckiesDisplay">
+        <legend><b>{id ? 'Tampilan tengah island' : 'Island center display'}</b><small>{id ? 'Yang tampil di tengah saat Duckies idle.' : 'What shows in the middle while Duckies is idle.'}</small></legend>
+        <div className="duckiesDisplayOptions" role="radiogroup">
+          {(['clock', 'countdown'] as const).map(mode => <label key={mode}><input type="radio" name="duckies-display" checked={display.mode === mode} onChange={() => saveDisplay({ mode })} />{mode === 'clock' ? (id ? 'Jam desktop' : 'Desktop clock') : 'Countdown'}</label>)}
+        </div>
+        {display.mode === 'countdown' && <label className="duckiesDisplayTarget">{id ? 'Hitung mundur ke' : 'Count down to'}
+          <input type="datetime-local" value={display.target} onChange={event => { if (event.target.value) saveDisplay({ target: event.target.value }); }} />
+        </label>}
+      </fieldset>
     </div>
   </section>;
 }
