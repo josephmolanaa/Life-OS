@@ -1,7 +1,12 @@
-import { getLang } from '@/lib/i18n';
+'use client';
+
+import { useEffect, useState } from 'react';
 import { Shell } from '@/components/finance/layout';
+import { getLang } from '@/lib/i18n';
+import { defaultStudySchedule } from '@/lib/study';
 
 type StudyItem = {
+  id?: string;
   code: string;
   course: string;
   day: string;
@@ -12,91 +17,124 @@ type StudyItem = {
   semester?: string | null;
 };
 
-export default async function JadwalPage() {
-  const lang = await getLang();
-  const id = lang === 'id';
+const DAYS = ['SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU', 'MINGGU', '-'];
+const FIELDS = ['code', 'course', 'day', 'sessions', 'time', 'room', 'lecturer', 'semester'] as const;
+const empty: StudyItem = { code: '', course: '', day: 'SENIN', sessions: '', time: '', room: '', lecturer: '', semester: 'Semester 7' };
+const dayOrder = (d: string) => { const i = DAYS.indexOf(d.toUpperCase()); return i < 0 ? 99 : i; };
 
-  const schedule: StudyItem[] = [];
-  const fetchErr = await (async () => {
+export default function JadwalPage() {
+  const [id, setId] = useState(false);
+  const [items, setItems] = useState<StudyItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [form, setForm] = useState<StudyItem | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => { getLang().then(l => setId(l === 'id')); load(); }, []);
+
+  async function load() {
+    setLoading(true);
     try {
       const res = await fetch('/api/study/schedule', { cache: 'no-store' });
-      if (!res.ok) return new Error('Failed to load schedule');
       const data = await res.json();
-      if (!Array.isArray(data)) return new Error('Invalid schedule data');
-      for (const item of data) {
-        schedule.push({
-          code: String(item.code),
-          course: String(item.course),
-          day: String(item.day),
-          sessions: item.sessions ?? null,
-          time: item.time ?? null,
-          room: item.room ?? null,
-          lecturer: item.lecturer ?? null,
-        });
-      }
-    } catch (err) {
-      return err as Error;
-    }
-  })();
+      if (!res.ok) throw new Error(data?.error || 'Failed to load schedule');
+      setItems(data); setError('');
+    } catch (err) { setError((err as Error).message); }
+    setLoading(false);
+  }
 
-  const semester = schedule[0]?.semester || 'Semester 7';
+  async function send(method: string, body?: object, itemId?: string) {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/study/schedule${itemId ? `?id=${encodeURIComponent(itemId)}` : ''}`, {
+        method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Request failed');
+      await load(); return true;
+    } catch (err) { setError((err as Error).message); return false; }
+    finally { setBusy(false); }
+  }
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form) return;
+    const body = Object.fromEntries(FIELDS.map(f => [f, form[f] ?? '']));
+    if (await send(form.id ? 'PATCH' : 'POST', body, form.id)) setForm(null);
+  }
+
+  async function remove(item: StudyItem) {
+    if (!item.id || !confirm(id ? `Hapus ${item.course}?` : `Delete ${item.course}?`)) return;
+    await send('DELETE', undefined, item.id);
+  }
+
+  async function importDefaults() {
+    for (const item of defaultStudySchedule) if (!(await send('POST', item))) break;
+  }
+
+  const sorted = [...items].sort((a, b) => dayOrder(a.day) - dayOrder(b.day) || String(a.time).localeCompare(String(b.time)));
+  const semester = items[0]?.semester || 'Semester 7';
+  const unset = id ? 'Belum ditentukan' : 'Not specified';
+  const show = (v?: string | null) => (!v || v === '-' ? unset : v);
+  const label: Record<(typeof FIELDS)[number], string> = id
+    ? { code: 'Kode', course: 'Mata kuliah', day: 'Hari', sessions: 'Jam ke', time: 'Waktu', room: 'Ruang', lecturer: 'Dosen', semester: 'Semester' }
+    : { code: 'Code', course: 'Course', day: 'Day', sessions: 'Sessions', time: 'Time', room: 'Room', lecturer: 'Lecturer', semester: 'Semester' };
 
   return (
     <Shell title={id ? 'Jadwal Kuliah' : 'Class Schedule'} quickFab={false}>
-      <div style={{ display: 'grid', gap: '20px', minWidth: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-          <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 600 }}>{semester}</h2>
-          <span className='pill'>{id ? 'Jadwal Kuliah' : 'Class Schedule'}</span>
+      <div style={{ display: 'grid', gap: 20, minWidth: 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 600 }}>{semester}</h2>
+          <button className="btn" type="button" onClick={() => setForm({ ...empty, semester })} disabled={busy}>{id ? 'Tambah mata kuliah' : 'Add course'}</button>
         </div>
 
-        {fetchErr && (
-          <div className='card' style={{ padding: '20px', color: 'var(--text2)' }}>
-            {fetchErr.message}
-          </div>
+        {error && <div className="card" role="alert" style={{ padding: 16, color: 'var(--red)' }}>{error}</div>}
+
+        {form && (
+          <form className="card" onSubmit={save} style={{ padding: 20, display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))' }}>
+            {FIELDS.map(f => (
+              <label key={f} style={{ display: 'grid', gap: 4, fontSize: 13, color: 'var(--text2)' }}>
+                {label[f]}
+                {f === 'day'
+                  ? <select value={form.day} onChange={e => setForm({ ...form, day: e.target.value })}>{DAYS.map(d => <option key={d}>{d}</option>)}</select>
+                  : <input value={form[f] ?? ''} required={f === 'code' || f === 'course'} maxLength={f === 'code' ? 20 : 120} onChange={e => setForm({ ...form, [f]: e.target.value })} />}
+              </label>
+            ))}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'end', gridColumn: '1 / -1' }}>
+              <button className="btn" type="submit" disabled={busy}>{id ? 'Simpan' : 'Save'}</button>
+              <button type="button" onClick={() => setForm(null)} disabled={busy}>{id ? 'Batal' : 'Cancel'}</button>
+            </div>
+          </form>
         )}
 
-        <div className="studyScheduleCards">
-          {schedule.map(item => (
-            <article className="card" key={item.code}>
-              <small>{item.code}</small><h3>{item.course}</h3>
-              <dl>
-                <dt>{id ? 'Hari / waktu' : 'Day / time'}</dt><dd>{item.day} · {item.time}</dd>
-                <dt>{id ? 'Ruang' : 'Room'}</dt><dd>{item.room === '-' || item.room == null ? (id ? 'Belum ditentukan' : 'Not specified') : item.room}</dd>
-                <dt>{id ? 'Dosen' : 'Lecturer'}</dt><dd>{item.lecturer === '-' || item.lecturer == null ? (id ? 'Belum ditentukan' : 'Not specified') : item.lecturer}</dd>
-              </dl>
-            </article>
-          ))}
-        </div>
-        <div className='card studyScheduleTable' style={{ padding: '0', overflow: 'hidden' }}>
-          <div style={{ overflowX: 'auto', maxWidth: '100%', WebkitOverflowScrolling: 'touch' }} tabIndex={0} aria-label={id ? 'Tabel jadwal kuliah, geser secara horizontal untuk melihat semua kolom' : 'Class schedule table, scroll horizontally to see all columns'}>
-            <table style={{ width: '100%', minWidth: '980px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
-              <thead>
-                <tr style={{ background: 'var(--surface2)', borderBottom: '1px solid var(--border)' }}>
-                  <th scope="col" style={{ padding: '14px 16px', color: 'var(--text2)', fontWeight: 600, width: '12%' }}>{id ? 'KODE' : 'CODE'}</th>
-                  <th scope="col" style={{ padding: '14px 16px', color: 'var(--text2)', fontWeight: 600, width: '25%' }}>{id ? 'MATA KULIAH' : 'COURSE'}</th>
-                  <th scope="col" style={{ padding: '14px 16px', color: 'var(--text2)', fontWeight: 600 }}>{id ? 'HARI' : 'DAY'}</th>
-                  <th scope="col" style={{ padding: '14px 16px', color: 'var(--text2)', fontWeight: 600 }}>{id ? 'JAM KE' : 'SESSIONS'}</th>
-                  <th scope="col" style={{ padding: '14px 16px', color: 'var(--text2)', fontWeight: 600 }}>{id ? 'WAKTU' : 'TIME'}</th>
-                  <th scope="col" style={{ padding: '14px 16px', color: 'var(--text2)', fontWeight: 600 }}>{id ? 'RUANG' : 'ROOM'}</th>
-                  <th scope="col" style={{ padding: '14px 16px', color: 'var(--text2)', fontWeight: 600 }}>{id ? 'DOSEN' : 'LECTURER'}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {schedule.map((item, idx) => (
-                  <tr key={idx} style={{ borderBottom: '1px solid var(--border2)' }}>
-                    <td style={{ padding: '14px 16px', fontFamily: 'JetBrains Mono, monospace', fontSize: '13px', color: 'var(--text2)' }}>{item.code}</td>
-                    <td style={{ padding: '14px 16px', fontWeight: 600, color: 'var(--text)' }}>{item.course}</td>
-                    <td style={{ padding: '14px 16px' }}><span className='pill'>{item.day}</span></td>
-                    <td style={{ padding: '14px 16px', fontFamily: 'JetBrains Mono, monospace' }}>{item.sessions ?? '-'}</td>
-                    <td style={{ padding: '14px 16px', fontFamily: 'JetBrains Mono, monospace', color: 'var(--text2)' }}>{item.time ?? '-'}</td>
-                    <td style={{ padding: '14px 16px', color: 'var(--text)' }}>{item.room ?? '-'}</td>
-                    <td style={{ padding: '14px 16px', color: 'var(--text2)' }}>{item.lecturer ?? '-'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        {loading ? <p style={{ color: 'var(--text2)' }}>{id ? 'Memuat…' : 'Loading…'}</p>
+          : !sorted.length ? (
+            <div className="card" style={{ padding: 20, display: 'grid', gap: 12, justifyItems: 'start' }}>
+              <p style={{ margin: 0 }}>{id ? 'Belum ada jadwal. Tambah mata kuliah atau impor jadwal Semester 7.' : 'No classes yet. Add a course or import the Semester 7 schedule.'}</p>
+              <button type="button" onClick={importDefaults} disabled={busy}>{id ? 'Impor jadwal Semester 7' : 'Import Semester 7 schedule'}</button>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))' }}>
+              {sorted.map(item => (
+                <article className="card" key={item.id ?? item.code} style={{ padding: 16, display: 'grid', gap: 10, minWidth: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+                    <span className="pill">{item.day}</span>
+                    <small style={{ color: 'var(--text2)', fontFamily: 'JetBrains Mono, monospace' }}>{item.code}</small>
+                  </div>
+                  <h3 style={{ margin: 0, fontSize: 16, overflowWrap: 'anywhere' }}>{item.course}</h3>
+                  <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 12px', fontSize: 13 }}>
+                    <dt style={{ color: 'var(--text2)' }}>{label.time}</dt><dd style={{ margin: 0 }}>{show(item.time)}{item.sessions && item.sessions !== '-' ? ` (${label.sessions} ${item.sessions})` : ''}</dd>
+                    <dt style={{ color: 'var(--text2)' }}>{label.room}</dt><dd style={{ margin: 0, overflowWrap: 'anywhere' }}>{show(item.room)}</dd>
+                    <dt style={{ color: 'var(--text2)' }}>{label.lecturer}</dt><dd style={{ margin: 0, overflowWrap: 'anywhere' }}>{show(item.lecturer)}</dd>
+                  </dl>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button type="button" onClick={() => setForm({ ...item })} disabled={busy}>{id ? 'Edit' : 'Edit'}</button>
+                    <button type="button" onClick={() => remove(item)} disabled={busy}>{id ? 'Hapus' : 'Delete'}</button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
       </div>
     </Shell>
   );
