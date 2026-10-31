@@ -784,3 +784,6 @@ html.dark-mode { --skeletonBase: color-mix(in srgb, var(--text) 9%, var(--surfac
   .pageLoading, .contentSkeleton, .skeletonReveal, [aria-busy="true"] > [aria-hidden="true"] { animation: none; }
 }
 @keyframes skeletonPulse { 50% { opacity: .6; } }
+.studyRowActions{opacity:0;transition:opacity .15s}.studyRow:hover .studyRowActions,.studyRow:focus-within .studyRowActions{opacity:1}
+@media(hover:none){.studyRowActions{opacity:1}}
+.studyRowActions .iconBtn{width:28px;height:28px;min-width:28px;border-radius:7px}

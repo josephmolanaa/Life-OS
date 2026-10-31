@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Edit2, Trash2 } from 'lucide-react';
 import { Shell } from '@/components/finance/layout';
 import { getLang } from '@/lib/i18n';
 import { defaultStudySchedule } from '@/lib/study';
@@ -83,9 +84,9 @@ export default function JadwalPage() {
     ? { code: 'Kode', course: 'Mata kuliah', day: 'Hari', sessions: 'Jam ke', time: 'Waktu', room: 'Ruang', lecturer: 'Dosen', semester: 'Semester' }
     : { code: 'Code', course: 'Course', day: 'Day', sessions: 'Sessions', time: 'Time', room: 'Room', lecturer: 'Lecturer', semester: 'Semester' };
   const actions = (item: StudyItem) => (
-    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-      <button type="button" onClick={() => setForm({ ...item })} disabled={busy}>Edit</button>
-      <button type="button" onClick={() => remove(item)} disabled={busy}>{id ? 'Hapus' : 'Delete'}</button>
+    <div style={{ display: 'flex', gap: 6 }}>
+      <button type="button" className="iconBtn" aria-label={`Edit ${item.course}`} title="Edit" onClick={() => setForm({ ...item })} disabled={busy}><Edit2 size={15} aria-hidden="true" /></button>
+      <button type="button" className="iconBtn" aria-label={`${id ? 'Hapus' : 'Delete'} ${item.course}`} title={id ? 'Hapus' : 'Delete'} onClick={() => remove(item)} disabled={busy} style={{ color: 'var(--red)' }}><Trash2 size={15} aria-hidden="true" /></button>
     </div>
   );
 
@@ -138,24 +139,27 @@ export default function JadwalPage() {
             </div>
             <div className="card studyScheduleTable" style={{ padding: 0, overflow: 'hidden' }}>
               <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
-                <colgroup><col style={{ width: '12%' }} /><col style={{ width: '20%' }} /><col style={{ width: '9%' }} /><col style={{ width: '7%' }} /><col style={{ width: '11%' }} /><col style={{ width: '16%' }} /><col style={{ width: '14%' }} /><col style={{ width: '11%' }} /></colgroup>
+                <colgroup><col style={{ width: '13%' }} /><col style={{ width: '22%' }} /><col style={{ width: '10%' }} /><col style={{ width: '8%' }} /><col style={{ width: '12%' }} /><col style={{ width: '17%' }} /><col style={{ width: '18%' }} /></colgroup>
                 <thead>
                   <tr style={{ background: 'var(--surface2)', borderBottom: '1px solid var(--border)' }}>
                     {(['code', 'course', 'day', 'sessions', 'time', 'room', 'lecturer'] as const).map(f => <th scope="col" key={f} style={th}>{label[f].toUpperCase()}</th>)}
-                    <th scope="col" style={th}><span className="sr-only">{id ? 'Aksi' : 'Actions'}</span></th>
                   </tr>
                 </thead>
                 <tbody>
                   {sorted.map(item => (
-                    <tr key={item.id ?? item.code} style={{ borderBottom: '1px solid var(--border2)' }}>
+                    <tr key={item.id ?? item.code} className="studyRow" style={{ borderBottom: '1px solid var(--border2)' }}>
                       <td style={{ ...td, fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'var(--text2)' }}>{item.code}</td>
                       <td style={{ ...td, fontWeight: 600 }}>{item.course}</td>
                       <td style={td}><span className="pill">{item.day}</span></td>
                       <td style={{ ...td, fontFamily: 'JetBrains Mono, monospace' }}>{item.sessions || '-'}</td>
                       <td style={{ ...td, fontFamily: 'JetBrains Mono, monospace', color: 'var(--text2)' }}>{item.time || '-'}</td>
                       <td style={td}>{item.room || '-'}</td>
-                      <td style={{ ...td, color: 'var(--text2)' }}>{item.lecturer || '-'}</td>
-                      <td style={td}>{actions(item)}</td>
+                      <td style={td}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                          <span style={{ color: 'var(--text2)', overflowWrap: 'anywhere' }}>{item.lecturer || '-'}</span>
+                          <span className="studyRowActions">{actions(item)}</span>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
