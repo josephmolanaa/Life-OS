@@ -217,17 +217,14 @@ useEffect(() => { const t = setInterval(() => setCountDownText(countdown()), 100
   // before the spring opens, shrink it after the spring settles, with room for the soft shadow.
   const islandRef = useRef<HTMLElement | null>(null);
   const shape = useRef<[number, number]>([0, 0]);
-  useEffect(() => {
-    const apply = () => {
-      shape.current = [width, height];
-      const pad = 18, canvas = 600;
-      const w = Math.min(canvas, width + pad * 2);
-      window.lifeOsDuckies?.setShape?.({ x: Math.max(0, Math.round((canvas - w) / 2)), y: 0, width: w, height: height + pad + 6 });
-    };
-    if (width >= shape.current[0] && height >= shape.current[1]) { apply(); return; }
-    const timer = window.setTimeout(apply, 560);
-    return () => window.clearTimeout(timer);
-  }, [width, height]);
+  const applyShape = useCallback(() => {
+    shape.current = [width, height];
+    const pad = 18, canvas = 600;
+    // clip window matches island position exactly: x = marginLeft
+    const marginLeft = mode === 'expanded' ? 0 : Math.max(0, Math.round((canvas - width) / 2));
+    window.lifeOsDuckies?.setShape?.({ x: marginLeft, y: 0, width: width + pad * 2, height: height + pad + 6 });
+  }, [width, height, mode]);
+  useEffect(() => { applyShape(); }, [applyShape]);
   // Hover intent: a short dwell opens, a short grace closes, so passing the cursor across doesn't flicker.
   const hoverTimer = useRef<number | undefined>(undefined);
   const hoverIn = () => { window.clearTimeout(hoverTimer.current); hoverTimer.current = window.setTimeout(() => setExpanded(true), 120); };
@@ -250,7 +247,7 @@ useEffect(() => { const t = setInterval(() => setCountDownText(countdown()), 100
     ['quests', id ? 'Quest' : 'Quests', CheckSquare], ['timer', id ? 'Fokus' : 'Focus', Clock], ['water', id ? 'Air' : 'Water', Droplets], ['pet', 'Pet', Cat], ['shelf', 'Shelf', FolderDown],
   ];
 
-  return <main ref={islandRef} className={`island ${mode}`} style={{ width, height }} onMouseEnter={hoverIn} onMouseLeave={hoverOut}>
+  return <main ref={islandRef} className={`island ${mode}`} style={{ width, height, marginLeft: mode === 'expanded' ? 0 : Math.max(0, Math.round((600 - width) / 2)) }} onMouseEnter={hoverIn} onMouseLeave={hoverOut}>
     {compactKind === 'idle' && <div ref={node => { compactRef.current = node; }} className={`islandLayer islandCompact idle ${mode === 'compact' ? 'on' : ''}`} aria-hidden={mode !== 'compact'}>
       <button type="button" className="islandExpand" onClick={() => setExpanded(true)} aria-label={id ? 'Buka Duckies' : 'Open Duckies'}><PixelDuck scene={pet} /><span className="islandTime">{clock}</span></button>
       {bell}

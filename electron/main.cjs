@@ -107,8 +107,9 @@ ipcMain.on('lifeos:duckies-resize', safeListener((event, bounds) => { assertDuck
 const duckiesCanvas = { width: 600, height: 260 };
 ipcMain.on('lifeos:duckies-shape', safeListener((event, rect) => {
   assertDuckiesWindow(event);
+  console.log('[Duckies] shape received:', JSON.stringify(rect));
   const values = [rect?.x, rect?.y, rect?.width, rect?.height];
-  if (!values.every(Number.isInteger) || rect.x < 0 || rect.y < 0 || rect.width < 1 || rect.height < 1 || rect.x + rect.width > duckiesCanvas.width || rect.y + rect.height > duckiesCanvas.height) throw new Error('Invalid Duckies shape');
+  if (!values.every(Number.isInteger) || rect.x < 0 || rect.y < 0 || rect.width < 1 || rect.height < 1 || rect.x + rect.width > duckiesCanvas.width || rect.y + rect.height > duckiesCanvas.height) { console.warn('[Duckies] Invalid shape rejected:', JSON.stringify(rect)); return; }
   if (duckiesWindow && !duckiesWindow.isDestroyed()) duckiesWindow.setShape([{ x: rect.x, y: rect.y, width: rect.width, height: rect.height }]);
 }));
 
