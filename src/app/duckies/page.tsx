@@ -83,6 +83,7 @@ export default function DuckiesPage() {
   const [toast, setToast] = useState<Toast | null>(null);
   const [dnd, setDnd] = useState(false);
   const [draft, setDraft] = useState('');
+  const [completing, setCompleting] = useState<string[]>([]);
   const [display, setDisplay] = useState<DuckiesDisplay>(() => readDuckiesDisplay(null));
   const [now, setNow] = useState(() => new Date());
   const toastTimer = useRef<number | undefined>(undefined);
@@ -242,6 +243,12 @@ export default function DuckiesPage() {
   const toggleTask = async (taskId: string, checked: boolean) => {
     if (await todoist.onToggle(taskId, checked) && checked) notify({ title: id ? 'Tugas selesai' : 'Task done', body: `${openTasks.length - 1} ${id ? 'tugas tersisa' : 'tasks left'}`, tone: 'amber' });
   };
+  // macOS Reminders feel: fill + strike instantly, let the row fade out, then persist the completion.
+  const completeTask = (taskId: string) => {
+    if (completing.includes(taskId)) return;
+    setCompleting(current => [...current, taskId]);
+    window.setTimeout(() => { void toggleTask(taskId, true).finally(() => setCompleting(current => current.filter(item => item !== taskId))); }, 650);
+  };
   const tabs: [Tab, string, typeof CheckSquare][] = [
     ['tasks', 'Todoist', CheckSquare], ['timer', id ? 'Fokus' : 'Focus', Clock], ['water', id ? 'Air' : 'Water', Droplets], ['pet', 'Pet', Cat], ['shelf', 'Shelf', FolderDown],
   ];
@@ -281,8 +288,8 @@ export default function DuckiesPage() {
             <span className="macRemindersCount">{openTasks.length}</span>
           </div>
           <ul className="macRemindersList">
-            {openTasks.slice(0, 5).map(item => <li key={item.id}>
-              <button type="button" className={`macCheck ${(item.priority || 'MEDIUM').toLowerCase()}`} disabled={todoist.busy} onClick={() => void toggleTask(item.id, true)} aria-label={`${id ? 'Selesaikan' : 'Complete'} ${item.label}`} />
+            {openTasks.slice(0, 5).map(item => <li key={item.id} className={completing.includes(item.id) ? 'completing' : ''}>
+              <button type="button" className={`macCheck ${(item.priority || 'MEDIUM').toLowerCase()}`} aria-pressed={completing.includes(item.id)} onClick={() => completeTask(item.id)} aria-label={`${id ? 'Selesaikan' : 'Complete'} ${item.label}`} />
               <span className="macRemindersText"><span>{item.label}</span>{item.due_date && <small>{new Date(`${item.due_date}T12:00:00`).toLocaleDateString(id ? 'id-ID' : 'en-US', { day: 'numeric', month: 'short' })}{item.due_time ? ` · ${item.due_time.slice(0, 5)}` : ''}</small>}</span>
               <button type="button" className="macRemindersDelete" disabled={todoist.busy} onClick={() => void todoist.onDelete(item.id)} aria-label={`${id ? 'Hapus' : 'Delete'} ${item.label}`}><X size={12} aria-hidden="true" /></button>
             </li>)}
