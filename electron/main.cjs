@@ -226,9 +226,14 @@ function createDuckiesWindow() {
   const { screen } = require('electron');
   const { width, height } = duckiesCanvas;
   const screenWidth = screen.getPrimaryDisplay().workAreaSize.width;
+  const pad = 18;
+  // Initial clip matches idle pill: centered 160x36 at y=0 (no padding here; renderer expands on mount)
+  const idleWidth = 160;
+  const idleHeight = 36;
+  const idleX = Math.round((width - idleWidth) / 2);
   // Fixed canvas clipped to the pill with setShape (see lifeos:duckies-shape).
   duckiesWindow = new BrowserWindow({ width, height, x: Math.round((screenWidth - width) / 2), y: 8, frame: false, transparent: true, alwaysOnTop: true, skipTaskbar: true, resizable: false, movable: false, focusable: true, hasShadow: false, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false } });
-  duckiesWindow.setShape([{ x: (width - 160) / 2, y: 0, width: 160, height: 36 }]);
+  duckiesWindow.setShape([{ x: idleX, y: 0, width: idleWidth, height: idleHeight }]);
   duckiesWindow.setAlwaysOnTop(true, 'floating');
   duckiesWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   duckiesWindow.on('closed', () => { duckiesWindow = undefined; stopWindowsNotifications(); });

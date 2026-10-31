@@ -249,7 +249,7 @@ useEffect(() => { const t = setInterval(() => setCountDownText(countdown()), 100
 
   return <main ref={islandRef} className={`island ${mode}`} style={{ width, height, marginLeft: mode === 'expanded' ? 0 : Math.max(0, Math.round((600 - width) / 2)) }} onMouseEnter={hoverIn} onMouseLeave={hoverOut}>
     {compactKind === 'idle' && <div ref={node => { compactRef.current = node; }} className={`islandLayer islandCompact idle ${mode === 'compact' ? 'on' : ''}`} aria-hidden={mode !== 'compact'}>
-      <button type="button" className="islandExpand" onClick={() => setExpanded(true)} aria-label={id ? 'Buka Duckies' : 'Open Duckies'}><PixelDuck scene={pet} /><span className="islandTime">{clock}</span></button>
+      <button type="button" className="islandExpand" onClick={() => setExpanded(true)} aria-label={id ? 'Buka Duckies' : 'Open Duckies'}><PixelDuck scene={pet} /><span className="islandTime red">{countDownText}</span></button>
       {bell}
     </div>}
     {compactKind !== 'idle' && <button ref={node => { compactRef.current = node; }} type="button" className={`islandLayer islandCompact ${compactKind} ${mode === 'compact' ? 'on' : ''}`} aria-hidden={mode !== 'compact'} tabIndex={mode === 'compact' ? 0 : -1} onClick={() => setExpanded(true)} aria-label={id ? 'Buka Duckies' : 'Open Duckies'}>
