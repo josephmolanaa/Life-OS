@@ -830,3 +830,34 @@ html.dark-mode { --skeletonBase: color-mix(in srgb, var(--text) 9%, var(--surfac
 .macRemindersText span { transition: color .2s; }
 .macRemindersList li.completing .macRemindersText span { color: #8e8e93; text-decoration: line-through; }
 @media (prefers-reduced-motion: reduce) { .macRemindersList li, .macCheck { transition: none; } }
+.macRemindersList li { gap: 6px; }
+.macPriority { width: 16px; height: 16px; flex: 0 0 16px; border-radius: 50%; border: 1px solid var(--border); box-shadow: inset 0 0 0 1px rgba(0,0,0,.35); cursor: pointer; transition: box-shadow .15s; } .macPriority:hover { box-shadow: inset 0 0 0 2px #fff; } .macPriority.high { background: #ff453a; } .macPriority.medium { background: #ffb800; } .macPriority.low { background: #8e8e93; }
+.macRemindersMeta { margin-top: 2px; display: flex; gap: 6px; font-size: 11px; color: #8e8e93; white-space: nowrap; gap: 8px; }
+.macRemindersMeta span { overflow: hidden; text-overflow: ellipsis; }
+.macRemindersEdit { width: 100%; border: 0; border-radius: 6px; background: rgba(255,255,255,.06); color: var(--text); font: inherit; font-size: 13px; padding: 6px 10px; resize: vertical; } .macRemindersEdit:focus-visible { outline: 2px solid #0a84ff; box-shadow: inset 0 0 0 1px #0a84ff; }
+.macRemindersActions { gap: 6px; }
+.macRemindersActions button { width: 22px; height: 22px; min-width: 22px; border: 0; border-radius: 6px; background: rgba(255,255,255,.08); color: var(--text2); cursor: pointer; display: grid; place-items: center; transition: background .15s, color .15s; } .macRemindersActions button:hover { background: rgba(255,255,255,.16); color: #fff; } .macRemindersEditDone { width: 100%; padding: 5px 10px; border-radius: 6px; border: 0; background: #0a84ff; color: #fff; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; } .macRemindersEditDone:disabled { opacity: .5; cursor: default; }
+/* Add bar: title row + detail chips (Reminders quick-entry). Native date/time inputs sit invisibly over their chip. */
+.macRemindersAdd { flex-direction: column; align-items: stretch; gap: 6px; }
+.macAddRow { display: flex; align-items: center; gap: 8px; }
+.macAddChips { display: flex; flex-wrap: wrap; gap: 6px; padding-left: 22px; }
+.macChip { position: relative; display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 9px; border: 0; border-radius: 999px; background: rgba(255,255,255,.08); color: #98989d; font: inherit; font-size: 11px; font-weight: 500; cursor: pointer; transition: background .15s, color .15s; }
+.macChip:hover { background: rgba(255,255,255,.14); color: #f5f5f7; }
+.macChip.set { background: rgba(10,132,255,.2); color: #64b5ff; }
+.macChip.off { opacity: .4; pointer-events: none; }
+.macChip.flag.high { background: rgba(255,69,58,.2); color: #ff6961; }
+.macChip.flag.low { color: #98989d; }
+.macChip.flag.medium { color: #ffb340; }
+.macChip.clear { width: 22px; padding: 0; justify-content: center; }
+.macChip input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
+.macChip input::-webkit-calendar-picker-indicator { position: absolute; inset: 0; width: 100%; height: 100%; cursor: pointer; }
+.macChip:focus-within { box-shadow: 0 0 0 2px #0a84ff; }
+.macRemindersMeta { margin-top: 0; align-items: center; flex: 0 0 auto; }
+.macRemindersActions { display: flex; flex: 0 0 auto; opacity: 0; transition: opacity .15s; }
+.macRemindersList li:hover .macRemindersActions, .macRemindersActions:focus-within { opacity: 1; }
+.macRemindersActions .macRemindersDelete { opacity: 1; }
+.macPriority { width: 8px; height: 8px; flex: 0 0 8px; border: 0; box-shadow: none; cursor: default; }
+.macRemindersEditWrap { flex: 1; min-width: 0; display: grid; gap: 6px; padding: 4px 0; }
+.macRemindersEditWrap .macRemindersEdit { resize: none; height: 28px; }
+.macRemindersEditWrap select, .macRemindersEditWrap input[type=date], .macRemindersEditWrap input[type=time] { height: 24px; padding: 0 8px; border: 0; border-radius: 6px; background: rgba(255,255,255,.08); color: #f5f5f7; font: inherit; font-size: 11px; color-scheme: dark; }
+.macRemindersList li:has(.macRemindersEditWrap) { max-height: none; }

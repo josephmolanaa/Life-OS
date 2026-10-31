@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { CheckSquare, Clock, Droplets, Cat, FolderDown, Pause, Play, RotateCcw, Minus, Plus, Bell, BellOff, Volume2, VolumeX, X, FileText } from 'lucide-react';
+import { CheckSquare, Clock, Droplets, Cat, FolderDown, Pause, Play, RotateCcw, Minus, Plus, Bell, BellOff, Volume2, VolumeX, X, FileText, Pencil, CalendarDays, Clock3, Flag } from 'lucide-react';
 import { useTodoistTasks } from '@/components/use-todoist-tasks';
 import { duckiesDisplayKey, formatCountdown, readDuckiesDisplay, type DuckiesDisplay } from '@/lib/duckies-display';
 import { getLang, type Lang } from '@/lib/i18n';
@@ -10,6 +10,10 @@ import { PixelDuck, duckScenes, type DuckScene } from '@/components/pixel-duck';
 type Tab = 'tasks' | 'timer' | 'water' | 'pet' | 'shelf';
 type Settings = { enabled: boolean; notifications: boolean; sound: boolean };
 type Toast = { id: number; title: string; body: string; tone: 'green' | 'blue' | 'amber' | 'discord'; image?: string };
+type Priority = 'LOW' | 'MEDIUM' | 'HIGH';
+type TaskMeta = { priority: Priority; due_date: string; due_time: string };
+const emptyMeta: TaskMeta = { priority: 'MEDIUM', due_date: '', due_time: '' };
+const nextPriority: Record<Priority, Priority> = { MEDIUM: 'HIGH', HIGH: 'LOW', LOW: 'MEDIUM' };
 type ShelfItem = { id: number; name: string; detail: string; url?: string; text?: string };
 
 const focusPresets = [15, 25, 45, 60];
@@ -84,6 +88,8 @@ export default function DuckiesPage() {
   const [dnd, setDnd] = useState(false);
   const [draft, setDraft] = useState('');
   const [completing, setCompleting] = useState<string[]>([]);
+  const [newMeta, setNewMeta] = useState<TaskMeta>({ priority: 'MEDIUM', due_date: '', due_time: '' });
+  const [editing, setEditing] = useState<string | null>(null);
   const [display, setDisplay] = useState<DuckiesDisplay>(() => readDuckiesDisplay(null));
   const [now, setNow] = useState(() => new Date());
   const toastTimer = useRef<number | undefined>(undefined);
@@ -249,6 +255,8 @@ export default function DuckiesPage() {
     setCompleting(current => [...current, taskId]);
     window.setTimeout(() => { void toggleTask(taskId, true).finally(() => setCompleting(current => current.filter(item => item !== taskId))); }, 650);
   };
+  const priorityLabel = (value: Priority) => ({ HIGH: id ? 'Tinggi' : 'High', MEDIUM: id ? 'Sedang' : 'Medium', LOW: id ? 'Rendah' : 'Low' })[value];
+  const shortDate = (value: string) => new Date(`${value}T12:00:00`).toLocaleDateString(id ? 'id-ID' : 'en-US', { day: 'numeric', month: 'short' });
   const tabs: [Tab, string, typeof CheckSquare][] = [
     ['tasks', 'Todoist', CheckSquare], ['timer', id ? 'Fokus' : 'Focus', Clock], ['water', id ? 'Air' : 'Water', Droplets], ['pet', 'Pet', Cat], ['shelf', 'Shelf', FolderDown],
   ];
@@ -290,16 +298,48 @@ export default function DuckiesPage() {
           <ul className="macRemindersList">
             {openTasks.slice(0, 5).map(item => <li key={item.id} className={completing.includes(item.id) ? 'completing' : ''}>
               <button type="button" className={`macCheck ${(item.priority || 'MEDIUM').toLowerCase()}`} aria-pressed={completing.includes(item.id)} onClick={() => completeTask(item.id)} aria-label={`${id ? 'Selesaikan' : 'Complete'} ${item.label}`} />
-              <span className="macRemindersText"><span>{item.label}</span>{item.due_date && <small>{new Date(`${item.due_date}T12:00:00`).toLocaleDateString(id ? 'id-ID' : 'en-US', { day: 'numeric', month: 'short' })}{item.due_time ? ` · ${item.due_time.slice(0, 5)}` : ''}</small>}</span>
-              <button type="button" className="macRemindersDelete" disabled={todoist.busy} onClick={() => void todoist.onDelete(item.id)} aria-label={`${id ? 'Hapus' : 'Delete'} ${item.label}`}><X size={12} aria-hidden="true" /></button>
+              {editing === item.id ? (
+                <div className="macRemindersEditWrap">
+                  <textarea className="macRemindersEdit" value={draft} onChange={e => setDraft(e.target.value)} aria-label={id ? 'Ubah tugas' : 'Edit task'} disabled={todoist.busy} />
+                  <div className="macRemindersMeta">
+                    <button type="button" className={`macChip flag ${newMeta.priority.toLowerCase()}`} onClick={() => setNewMeta({ ...newMeta, priority: nextPriority[newMeta.priority] })} disabled={todoist.busy} aria-label={id ? 'Ganti prioritas' : 'Change priority'}><Flag size={11} aria-hidden="true" />{priorityLabel(newMeta.priority)}</button>
+                    <label className={`macChip ${newMeta.due_date ? 'set' : ''}`}><CalendarDays size={11} aria-hidden="true" />{newMeta.due_date ? shortDate(newMeta.due_date) : (id ? 'Tanggal' : 'Date')}<input type="date" value={newMeta.due_date} onChange={e => setNewMeta({ ...newMeta, due_date: e.target.value, due_time: e.target.value ? newMeta.due_time : '' })} disabled={todoist.busy} aria-label={id ? 'Tanggal jatuh tempo' : 'Due date'} /></label>
+                    <label className={`macChip ${newMeta.due_time ? 'set' : ''} ${newMeta.due_date ? '' : 'off'}`}><Clock3 size={11} aria-hidden="true" />{newMeta.due_time || (id ? 'Jam' : 'Time')}<input type="time" value={newMeta.due_time} disabled={todoist.busy || !newMeta.due_date} onChange={e => setNewMeta({ ...newMeta, due_time: e.target.value })} aria-label={id ? 'Waktu' : 'Time'} /></label>
+                  </div>
+                  <div className="macRemindersActions">
+                    <button type="button" className="macRemindersEditDone" disabled={todoist.busy || !draft.trim()} onClick={() => { todoist.onUpdate(item.id, { label: draft.trim(), priority: newMeta.priority, due_date: newMeta.due_date || null, due_time: newMeta.due_time || null }).then(() => { setEditing(null); setDraft(''); setNewMeta(emptyMeta); }); }}>{id ? 'Simpan' : 'Save'}</button>
+                    <button type="button" onClick={() => { setEditing(null); setDraft(''); setNewMeta(emptyMeta); }} aria-label={id ? 'Batal' : 'Cancel'}><X size={12} aria-hidden="true" /></button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <span className="macRemindersText"><span>{item.label}</span></span>
+                  <div className="macRemindersMeta">
+                    <span className={`macPriority ${(item.priority || 'MEDIUM').toLowerCase()}`} aria-label={id ? 'Prioritas' : 'Priority'} />
+                    {item.due_date && <span>{new Date(`${item.due_date}T12:00:00`).toLocaleDateString(id ? 'id-ID' : 'en-US', { day: 'numeric', month: 'short' })}{item.due_time ? ` · ${item.due_time.slice(0, 5)}` : ''}</span>}
+                  </div>
+                  <div className="macRemindersActions">
+                    <button type="button" onClick={() => { setEditing(item.id); setDraft(item.label); setNewMeta({ priority: item.priority || 'MEDIUM', due_date: item.due_date || '', due_time: item.due_time || '' }); }} aria-label={id ? 'Ubah' : 'Edit'}><Pencil size={12} aria-hidden="true" /></button>
+                    <button type="button" className="macRemindersDelete" disabled={todoist.busy} onClick={() => void todoist.onDelete(item.id)} aria-label={`${id ? 'Hapus' : 'Delete'} ${item.label}`}><X size={12} aria-hidden="true" /></button>
+                  </div>
+                </>
+              )}
             </li>)}
             {openTasks.length > 5 && <li className="macRemindersMore">+{openTasks.length - 5} {id ? 'lainnya di Life OS' : 'more in Life OS'}</li>}
           </ul>
           {!todoist.loading && !openTasks.length && <p className="macRemindersEmpty">{id ? 'Semua beres.' : 'All done.'}</p>}
           {todoist.error && <p role="alert" className="macRemindersEmpty">{todoist.error}</p>}
-          <form className="macRemindersAdd" onSubmit={event => { event.preventDefault(); const label = draft.trim(); if (!label || todoist.busy) return; setDraft(''); void todoist.onAdd(label); }}>
-            <Plus size={14} aria-hidden="true" />
-            <input type="text" value={draft} maxLength={120} placeholder={id ? 'Pengingat baru' : 'New Reminder'} disabled={todoist.busy} onChange={event => setDraft(event.target.value)} aria-label={id ? 'Tugas baru untuk Inbox' : 'New Inbox task'} />
+          <form className="macRemindersAdd" onSubmit={event => { event.preventDefault(); const label = draft.trim(); if (!label || todoist.busy) return; setDraft(''); setNewMeta(emptyMeta); void todoist.onAdd(label, newMeta); }}>
+            <div className="macAddRow">
+              <Plus size={14} aria-hidden="true" />
+              <input type="text" value={draft} maxLength={120} placeholder={id ? 'Pengingat baru' : 'New Reminder'} disabled={todoist.busy} onChange={event => setDraft(event.target.value)} aria-label={id ? 'Tugas baru untuk Inbox' : 'New Inbox task'} />
+            </div>
+            <div className="macAddChips">
+              <button type="button" className={`macChip flag ${newMeta.priority.toLowerCase()}`} onClick={() => setNewMeta({ ...newMeta, priority: nextPriority[newMeta.priority] })} aria-label={id ? 'Ganti prioritas' : 'Change priority'}><Flag size={11} aria-hidden="true" />{priorityLabel(newMeta.priority)}</button>
+              <label className={`macChip ${newMeta.due_date ? 'set' : ''}`}><CalendarDays size={11} aria-hidden="true" />{newMeta.due_date ? shortDate(newMeta.due_date) : (id ? 'Tanggal' : 'Date')}<input type="date" value={newMeta.due_date} onChange={e => setNewMeta({ ...newMeta, due_date: e.target.value, due_time: e.target.value ? newMeta.due_time : '' })} aria-label={id ? 'Tanggal jatuh tempo' : 'Due date'} /></label>
+              <label className={`macChip ${newMeta.due_time ? 'set' : ''} ${newMeta.due_date ? '' : 'off'}`}><Clock3 size={11} aria-hidden="true" />{newMeta.due_time || (id ? 'Jam' : 'Time')}<input type="time" value={newMeta.due_time} disabled={!newMeta.due_date} onChange={e => setNewMeta({ ...newMeta, due_time: e.target.value })} aria-label={id ? 'Waktu' : 'Time'} /></label>
+              {(newMeta.due_date || newMeta.priority !== 'MEDIUM') && <button type="button" className="macChip clear" onClick={() => setNewMeta(emptyMeta)} aria-label={id ? 'Hapus detail' : 'Clear details'}><X size={11} aria-hidden="true" /></button>}
+            </div>
           </form>
         </div>}
         {tab === 'timer' && <div className="islandSplit">
