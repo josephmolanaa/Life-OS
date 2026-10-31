@@ -226,7 +226,12 @@ useEffect(() => { const t = setInterval(() => setCountDownText(countdown()), 100
     const w = Math.min(canvas, width + pad * 2);
     window.lifeOsDuckies?.setShape?.({ x: Math.max(0, Math.round((canvas - w) / 2)), y: 0, width: w, height: height + pad + 6 });
   }, [width, height]);
-  useEffect(() => { applyShape(); }, [applyShape]);
+  // Grow the clip before the spring opens; shrink only after it settles so the close animation isn't cut off.
+  useEffect(() => {
+    if (width >= shape.current[0] && height >= shape.current[1]) { applyShape(); return; }
+    const timer = window.setTimeout(applyShape, 560);
+    return () => window.clearTimeout(timer);
+  }, [applyShape, width, height]);
   // Hover intent: a short dwell opens, a short grace closes, so passing the cursor across doesn't flicker.
   const hoverTimer = useRef<number | undefined>(undefined);
   const hoverIn = () => { window.clearTimeout(hoverTimer.current); hoverTimer.current = window.setTimeout(() => setExpanded(true), 120); };
