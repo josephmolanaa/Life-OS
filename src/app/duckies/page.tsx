@@ -344,7 +344,7 @@ export default function DuckiesPage() {
               {(newMeta.due_date || newMeta.priority !== 'MEDIUM') && <button type="button" className="macChip clear" onClick={() => setNewMeta(emptyMeta)} aria-label={id ? 'Hapus detail' : 'Clear details'}><X size={11} aria-hidden="true" /></button>}
               <span className="macEditSpacer" />
               <button type="button" className="macEditCancel" onClick={() => { setAdding(false); setAddDraft(''); setNewMeta(emptyMeta); }}>{id ? 'Batal' : 'Cancel'}</button>
-              <button type="submit" className="macRemindersEditDone" disabled={todoist.busy || !addDraft.trim()}>{id ? 'Tambah' : 'Add'}</button>
+              <button type="submit" className="macRemindersEditDone macAddSubmit" disabled={todoist.busy || !addDraft.trim()}>{id ? 'Tambah' : 'Add'}</button>
             </div>
           </form>}
         </div>}
