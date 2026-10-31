@@ -9,7 +9,7 @@ import { PixelDuck, duckScenes, type DuckScene } from '@/components/pixel-duck';
 type Tab = 'quests' | 'timer' | 'water' | 'pet' | 'shelf';
 type Settings = { enabled: boolean; notifications: boolean; sound: boolean };
 type Toast = { id: number; title: string; body: string; tone: 'green' | 'blue' | 'amber' | 'discord'; image?: string };
-type ShelfItem = { id: number; name: string; detail: string; url?: string };
+type ShelfItem = { id: number; name: string; detail: string; url?: string; text?: string };
 
 const focusPresets = [15, 25, 45, 60];
 const waterAmounts = [
@@ -82,6 +82,17 @@ export default function DuckiesPage() {
   const [toast, setToast] = useState<Toast | null>(null);
   const [dnd, setDnd] = useState(false);
   const [clock, setClock] = useState('');
+  const [draft, setDraft] = useState('');
+const countdownTarget = new Date('2030-03-18T00:00:00').getTime();
+const countdown = () => {
+  const left = countdownTarget - Date.now();
+  if (left <= 0) return '0 0 0 0';
+  const ms = left % 1000; const s = Math.floor((left / 1000) % 60); const m = Math.floor((left / 1000 / 60) % 60);
+  const h = Math.floor((left / 1000 / 60 / 60) % 24); const d = Math.floor((left / 1000 / 60 / 60 / 24) % 30);
+  const mo = Math.floor((left / 1000 / 60 / 60 / 24 / 30) % 12); const y = Math.floor(left / 1000 / 60 / 60 / 24 / 30 / 12);
+  return `${y} ${mo} ${d} ${h}`;
+};
+const [countDownText, setCountDownText] = useState(countdown());
   const toastTimer = useRef<number | undefined>(undefined);
   const quests = useDailyQuests(lang);
   const id = lang === 'id';
@@ -115,6 +126,7 @@ export default function DuckiesPage() {
   }, []);
   const toggleDnd = () => setDnd(value => { localStorage.setItem('lifeos-duckies-dnd', value ? '0' : '1'); return !value; });
   useEffect(() => { localStorage.setItem('lifeos-duckies-state', JSON.stringify({ seconds, water, day: new Date().toDateString() })); }, [seconds, water]);
+useEffect(() => { const t = setInterval(() => setCountDownText(countdown()), 1000); return () => clearInterval(t); }, []);
 
   const notify = useCallback((next: Omit<Toast, 'id'>) => {
     if (dnd) return;
@@ -160,7 +172,7 @@ export default function DuckiesPage() {
   // Shelf: temporary, in-memory only. Files come from drag-drop or Ctrl+V; nothing is opened or uploaded.
   const addToShelf = (files: File[], text = '') => {
     const items: ShelfItem[] = files.map((file, index) => ({ id: Date.now() + index, name: file.name || (id ? 'Gambar ditempel' : 'Pasted image'), detail: sizeLabel(file.size), url: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined }));
-    if (!items.length && text.trim()) items.push({ id: Date.now(), name: text.trim().slice(0, 60), detail: `${text.length} ${id ? 'karakter' : 'chars'}` });
+    if (!items.length && text.trim()) items.push({ id: Date.now(), name: text.trim().slice(0, 60), detail: `${text.length} ${id ? 'karakter' : 'chars'}`, text: text.trim() });
     if (items.length) setShelf(current => [...items, ...current].slice(0, 12));
   };
   const removeFromShelf = (item: ShelfItem) => { if (item.url?.startsWith('blob:')) URL.revokeObjectURL(item.url); setShelf(current => current.filter(entry => entry.id !== item.id)); };
@@ -175,7 +187,7 @@ export default function DuckiesPage() {
     const items: ShelfItem[] = clip.files?.length
       ? clip.files.map((file, index) => ({ id: now + index, name: file.name, detail: sizeLabel(file.size) }))
       : clip.image ? [{ id: now, name: id ? 'Gambar ditempel' : 'Pasted image', detail: sizeLabel(clip.image.size), url: clip.image.preview }]
-      : clip.text ? [{ id: now, name: clip.text.trim().slice(0, 60), detail: `${clip.text.length} ${id ? 'karakter' : 'chars'}` }] : [];
+      : clip.text ? [{ id: now, name: clip.text.trim().slice(0, 60), detail: `${clip.text.length} ${id ? 'karakter' : 'chars'}`, text: clip.text.trim() }] : [];
     if (items.length) setShelf(current => [...items, ...current].slice(0, 12));
     return true;
   };
@@ -253,7 +265,7 @@ export default function DuckiesPage() {
         {quests.todos.length ? <span className="islandLead"><span className="islandRing" style={{ ['--p' as string]: done / quests.todos.length }} aria-hidden="true" /><span className="islandTime">{done}/{quests.todos.length}</span></span> : <PixelDuck scene={pet} />}
         <span className="islandGap" aria-hidden="true" />
         {water ? <span className="islandMeta"><Droplets size={12} aria-hidden="true" />{(water / 1000).toFixed(1)}L</span> : <PixelDuck scene={pet} />}
-      </> : null}
+      </> : <> <span className="islandLead"><span className="islandRing" style={{ ['--p' as string]: 0 }} aria-hidden="true" /><span className="islandTime red">{countDownText}</span></span> </>}
     </button>}
 
     <div ref={toastRef} className={`islandLayer islandToast ${lastToast.current?.tone ?? 'green'} ${mode === 'toast' ? 'on' : ''}`} role="status" aria-live="polite">
@@ -272,6 +284,10 @@ export default function DuckiesPage() {
       <div className="islandBody">
         {tab === 'quests' && <div className="islandQuests">
           <p className="islandMuted">{id ? 'Quest hari ini' : 'Today’s quests'} · {done}/{quests.todos.length}</p>
+          <form className="islandAdd" onSubmit={event => { event.preventDefault(); const label = draft.trim(); if (!label || quests.busy) return; setDraft(''); void quests.onAdd(label); }}>
+            <input type="text" value={draft} maxLength={120} placeholder={id ? 'Tambah quest…' : 'Add a quest…'} disabled={quests.busy} onChange={event => setDraft(event.target.value)} aria-label={id ? 'Nama quest baru' : 'New quest name'} />
+            <button type="submit" className="primary" disabled={quests.busy || !draft.trim()}>{id ? 'Add' : 'Add'}</button>
+          </form>
           {quests.todos.slice(0, 4).map(item => <label key={item.id} className={item.done ? 'done' : ''}><input type="checkbox" checked={item.done} disabled={quests.busy} onChange={event => void toggleQuest(item.id, event.target.checked)} /><span>{item.label}</span></label>)}
           {quests.error && <p role="alert" className="islandMuted">{quests.error}</p>}
           {!quests.loading && !quests.todos.length && <p className="islandMuted">{id ? 'Belum ada quest hari ini.' : 'No quests today.'}</p>}
@@ -310,8 +326,8 @@ export default function DuckiesPage() {
             <div role="radiogroup" aria-label={id ? 'Model Duckies' : 'Duckies model'}>{duckScenes.map(scene => <button key={scene} type="button" role="radio" aria-checked={pet === scene} className={pet === scene ? 'active' : ''} onClick={() => choosePet(scene)} title={petNames[scene][id ? 0 : 1]}><PixelDuck scene={scene} size={28} /><span>{petNames[scene][id ? 0 : 1]}</span></button>)}</div>
           </div>
         </div>}
-        {tab === 'shelf' && <div className={`islandShelf ${shelf.length ? 'filled' : ''}`} tabIndex={0} role="region" aria-label={id ? 'Shelf: tarik file atau tekan Ctrl+V' : 'Shelf: drop files or press Ctrl+V'} onClick={event => { event.currentTarget.focus(); void pasteFromClipboard(); }} onKeyDown={event => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'v' && window.lifeOsDuckies?.readClipboard) { event.preventDefault(); void pasteFromClipboard(); } }} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); addToShelf([...event.dataTransfer.files], event.dataTransfer.getData('text/plain')); }} onPaste={event => { event.preventDefault(); addToShelf([...event.clipboardData.files], event.clipboardData.getData('text/plain')); }}>
-          {shelf.length ? <ul>{shelf.map(item => <li key={item.id}>{item.url ? <img src={item.url} alt="" /> : <FileText size={18} aria-hidden="true" />}<span><b>{item.name}</b><small>{item.detail}</small></span><button type="button" onClick={event => { event.stopPropagation(); removeFromShelf(item); }} aria-label={`${id ? 'Hapus' : 'Remove'} ${item.name}`}><X size={12} aria-hidden="true" /></button></li>)}</ul>
+        {tab === 'shelf' && <div className={`islandShelf ${shelf.length ? 'filled' : ''}`} tabIndex={0} role="region" aria-label={id ? 'Shelf: tarik file atau tekan Ctrl+V' : 'Shelf: drop files or press Ctrl+V'} onClick={event => { event.currentTarget.focus(); void pasteFromClipboard(); }} onKeyDown={event => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'v' && window.lifeOsDuckies?.readClipboard) { event.preventDefault(); void pasteFromClipboard(); } }} onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; }} onDrop={event => { event.preventDefault(); addToShelf([...event.dataTransfer.files], event.dataTransfer.getData('text/plain')); }} onPaste={event => { event.preventDefault(); addToShelf([...event.clipboardData.files], event.clipboardData.getData('text/plain')); }}>
+          {shelf.length ? <ul>{shelf.map(item => <li key={item.id} draggable={true} onDragStart={event => { event.dataTransfer.setData('text/plain', item.text ?? item.url ?? item.name); event.dataTransfer.effectAllowed = 'copyMove'; }} onDragEnd={event => { if (event.dataTransfer.dropEffect === 'move') removeFromShelf(item); }} onClick={event => { event.stopPropagation(); void pasteFromClipboard(); }}>{item.url ? <img src={item.url} alt="" draggable={false} /> : item.text ? <FileText size={18} aria-hidden="true" /> : <FileText size={18} aria-hidden="true" />}<span><b>{item.name}</b><small>{item.detail}</small></span><button type="button" onClick={event => { event.stopPropagation(); removeFromShelf(item); }} aria-label={`${id ? 'Hapus' : 'Remove'} ${item.name}`}><X size={12} aria-hidden="true" /></button></li>)}</ul>
             : <><FolderDown size={20} aria-hidden="true" /><span>{id ? 'Taruh file di sini, atau klik / Ctrl+V untuk tempel dari clipboard.' : 'Drop files here, or click / Ctrl+V to paste from clipboard.'}</span></>}
         </div>}
       </div>

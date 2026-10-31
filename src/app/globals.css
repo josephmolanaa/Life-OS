@@ -787,3 +787,6 @@ html.dark-mode { --skeletonBase: color-mix(in srgb, var(--text) 9%, var(--surfac
 .studyRowActions{opacity:0;transition:opacity .15s}.studyRow:hover .studyRowActions,.studyRow:focus-within .studyRowActions{opacity:1}
 @media(hover:none){.studyRowActions{opacity:1}}
 .studyRowActions .iconBtn{width:28px;height:28px;min-width:28px;border-radius:7px}
+.islandAdd{display:flex;gap:8px;margin-top:8px}.islandAdd input{flex:1;padding:6px 10px;font-size:13px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)}.islandAdd input::placeholder{color:var(--text2)}.islandAdd input:focus{outline:none;border-color:var(--accent)}.islandAdd button{padding:6px 12px;font-size:13px}
+.islandTime.red{color:#ff3b30}
+.toggle{position:relative;display:inline-block;width:40px;height:22px;flex-shrink:0}.toggle input{opacity:0;width:0;height:0}.toggle .slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#ccc;transition:.2s;border-radius:22px}.toggle .slider:before{position:absolute;content:"";height:16px;width:16px;left:3px;bottom:3px;background:white;transition:.2s;border-radius:50%}.toggle input:checked + .slider{background:#34c759}.toggle input:checked + .slider:before{transform:translateX(18px)}.toggle input:disabled + .slider{opacity:.5;cursor:not-allowed}
