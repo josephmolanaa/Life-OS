@@ -87,6 +87,7 @@ export default function DuckiesPage() {
   const [toast, setToast] = useState<Toast | null>(null);
   const [dnd, setDnd] = useState(false);
   const [addDraft, setAddDraft] = useState('');
+  const [adding, setAdding] = useState(false);
   const [completing, setCompleting] = useState<string[]>([]);
   const [newMeta, setNewMeta] = useState<TaskMeta>(emptyMeta);
   const [editing, setEditing] = useState<(TaskMeta & { id: string; label: string }) | null>(null);
@@ -329,16 +330,21 @@ export default function DuckiesPage() {
           </ul>
           {!todoist.loading && !openTasks.length && <p className="macRemindersEmpty">{id ? 'Semua beres.' : 'All done.'}</p>}
           {todoist.error && <p role="alert" className="macRemindersEmpty">{todoist.error}</p>}
-          {!editing && <form className="macRemindersAdd" onSubmit={event => { event.preventDefault(); const label = addDraft.trim(); if (!label || todoist.busy) return; setAddDraft(''); setNewMeta(emptyMeta); void todoist.onAdd(label, newMeta); }}>
+          {/* Idle: just a round + in the corner. Click opens the quick-entry; Esc or Cancel folds it back. */}
+          {!editing && !adding && <button type="button" className="macAddFab" onClick={() => setAdding(true)} aria-label={id ? 'Tambah pengingat' : 'Add reminder'} title={id ? 'Tambah pengingat' : 'Add reminder'}><Plus size={16} aria-hidden="true" /></button>}
+          {!editing && adding && <form className="macRemindersAdd" onKeyDown={event => { if (event.key === 'Escape') { setAdding(false); setAddDraft(''); setNewMeta(emptyMeta); } }} onSubmit={event => { event.preventDefault(); const label = addDraft.trim(); if (!label || todoist.busy) return; setAddDraft(''); setNewMeta(emptyMeta); setAdding(false); void todoist.onAdd(label, newMeta); }}>
             <div className="macAddRow">
               <Plus size={14} aria-hidden="true" />
-              <input type="text" value={addDraft} maxLength={120} placeholder={id ? 'Pengingat baru' : 'New Reminder'} disabled={todoist.busy} onChange={event => setAddDraft(event.target.value)} aria-label={id ? 'Tugas baru untuk Inbox' : 'New Inbox task'} />
+              <input autoFocus type="text" value={addDraft} maxLength={120} placeholder={id ? 'Pengingat baru' : 'New Reminder'} disabled={todoist.busy} onChange={event => setAddDraft(event.target.value)} aria-label={id ? 'Tugas baru untuk Inbox' : 'New Inbox task'} />
             </div>
             <div className="macAddChips">
               <button type="button" className={`macChip flag ${newMeta.priority.toLowerCase()}`} onClick={() => setNewMeta({ ...newMeta, priority: nextPriority[newMeta.priority] })} aria-label={id ? 'Ganti prioritas' : 'Change priority'}><Flag size={11} aria-hidden="true" />{priorityLabel(newMeta.priority)}</button>
               <label className={`macChip ${newMeta.due_date ? 'set' : ''}`}><CalendarDays size={11} aria-hidden="true" />{newMeta.due_date ? shortDate(newMeta.due_date) : (id ? 'Tanggal' : 'Date')}<input type="date" value={newMeta.due_date} onChange={e => setNewMeta({ ...newMeta, due_date: e.target.value, due_time: e.target.value ? newMeta.due_time : '' })} aria-label={id ? 'Tanggal jatuh tempo' : 'Due date'} /></label>
               <label className={`macChip ${newMeta.due_time ? 'set' : ''} ${newMeta.due_date ? '' : 'off'}`}><Clock3 size={11} aria-hidden="true" />{newMeta.due_time || (id ? 'Jam' : 'Time')}<input type="time" value={newMeta.due_time} disabled={!newMeta.due_date} onChange={e => setNewMeta({ ...newMeta, due_time: e.target.value })} aria-label={id ? 'Waktu' : 'Time'} /></label>
               {(newMeta.due_date || newMeta.priority !== 'MEDIUM') && <button type="button" className="macChip clear" onClick={() => setNewMeta(emptyMeta)} aria-label={id ? 'Hapus detail' : 'Clear details'}><X size={11} aria-hidden="true" /></button>}
+              <span className="macEditSpacer" />
+              <button type="button" className="macEditCancel" onClick={() => { setAdding(false); setAddDraft(''); setNewMeta(emptyMeta); }}>{id ? 'Batal' : 'Cancel'}</button>
+              <button type="submit" className="macRemindersEditDone" disabled={todoist.busy || !addDraft.trim()}>{id ? 'Tambah' : 'Add'}</button>
             </div>
           </form>}
         </div>}
