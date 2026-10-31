@@ -200,10 +200,12 @@ useEffect(() => { const t = setInterval(() => setCountDownText(countdown()), 100
   if (toast) lastToast.current = toast;
   const [compactSize, setCompactSize] = useState<[number, number]>([160, 36]);
   const [toastSize, setToastSize] = useState<[number, number]>([300, 64]);
+  const compactKind = timerActive ? 'live' : quests.todos.length || water ? 'split' : 'idle';
+  // Re-bind on compactKind: idle and split/live are different nodes, so a stale observer would read a detached node as 0x0.
   useLayoutEffect(() => {
     const watch = (node: HTMLElement | null, set: (size: [number, number]) => void) => {
       if (!node) return undefined;
-      const measure = () => set([Math.ceil(node.offsetWidth), Math.ceil(node.offsetHeight)]);
+      const measure = () => { if (node.isConnected && node.offsetWidth) set([Math.ceil(node.offsetWidth), Math.ceil(node.offsetHeight)]); };
       measure();
       const observer = new ResizeObserver(measure);
       observer.observe(node);
@@ -211,7 +213,7 @@ useEffect(() => { const t = setInterval(() => setCountDownText(countdown()), 100
     };
     const observers = [watch(compactRef.current, setCompactSize), watch(toastRef.current, setToastSize)];
     return () => observers.forEach(observer => observer?.disconnect());
-  }, []);
+  }, [compactKind]);
   const [width, height] = mode === 'expanded' ? [560, 230] : mode === 'toast' ? toastSize : compactSize;
   // The OS window never resizes (that is what blinked); it is clipped to the pill instead. Grow the clip
   // before the spring opens, shrink it after the spring settles, with room for the soft shadow.
@@ -229,7 +231,6 @@ useEffect(() => { const t = setInterval(() => setCountDownText(countdown()), 100
   const hoverTimer = useRef<number | undefined>(undefined);
   const hoverIn = () => { window.clearTimeout(hoverTimer.current); hoverTimer.current = window.setTimeout(() => setExpanded(true), 120); };
   const hoverOut = () => { window.clearTimeout(hoverTimer.current); hoverTimer.current = window.setTimeout(() => setExpanded(false), 220); };
-  const compactKind = timerActive ? 'live' : quests.todos.length || water ? 'split' : 'idle';
   const dndLabel = dnd ? (id ? 'Matikan Jangan Ganggu' : 'Turn off Do Not Disturb') : (id ? 'Nyalakan Jangan Ganggu' : 'Turn on Do Not Disturb');
   const bell = <button type="button" className={`islandBell ${dnd ? 'on' : ''}`} onClick={event => { event.stopPropagation(); toggleDnd(); }} aria-pressed={dnd} aria-label={dndLabel} title={dndLabel}>{dnd ? <BellOff size={14} aria-hidden="true" /> : <Bell size={14} aria-hidden="true" />}</button>;
 
