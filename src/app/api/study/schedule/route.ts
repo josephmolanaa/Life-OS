@@ -35,21 +35,23 @@ export async function POST(request: Request) {
   if (typeof code !== 'string' || !code.trim() || code.trim().length > 20) return NextResponse.json({ error: 'Code must be 1–20 characters' }, { status: 400 });
   if (typeof course !== 'string' || !course.trim() || course.trim().length > 120) return NextResponse.json({ error: 'Course must be 1–120 characters' }, { status: 400 });
   if (typeof day !== 'string' || !day.trim()) return NextResponse.json({ error: 'Day is required' }, { status: 400 });
-  if (sessions !== undefined && typeof sessions !== 'string') return NextResponse.json({ error: 'Sessions must be a string' }, { status: 400 });
-  if (time !== undefined && typeof time !== 'string') return NextResponse.json({ error: 'Time must be a string' }, { status: 400 });
-  if (room !== undefined && typeof room !== 'string') return NextResponse.json({ error: 'Room must be a string' }, { status: 400 });
-  if (lecturer !== undefined && typeof lecturer !== 'string') return NextResponse.json({ error: 'Lecturer must be a string' }, { status: 400 });
+  if (sessions != null && typeof sessions !== 'string') return NextResponse.json({ error: 'Sessions must be a string' }, { status: 400 });
+  if (time != null && typeof time !== 'string') return NextResponse.json({ error: 'Time must be a string' }, { status: 400 });
+  if (room != null && typeof room !== 'string') return NextResponse.json({ error: 'Room must be a string' }, { status: 400 });
+  if (lecturer != null && typeof lecturer !== 'string') return NextResponse.json({ error: 'Lecturer must be a string' }, { status: 400 });
   if (typeof semester !== 'string' || !semester.trim()) return NextResponse.json({ error: 'Semester is required' }, { status: 400 });
+
+  const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
 
   const { data, error } = await supabase.from('study_schedule').insert({
     user_id: user.id,
     code: code.trim(),
     course: course.trim(),
     day: day.trim(),
-    sessions: sessions?.trim() || null,
-    time: time?.trim() || null,
-    room: room?.trim() || null,
-    lecturer: lecturer?.trim() || null,
+    sessions: str(sessions),
+    time: str(time),
+    room: str(room),
+    lecturer: str(lecturer),
     semester: semester.trim()
   }).select().single();
 
