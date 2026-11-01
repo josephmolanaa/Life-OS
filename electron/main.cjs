@@ -90,18 +90,80 @@ const knownNotificationApps = new Set(['Discord', 'WhatsApp', 'Telegram', 'Googl
 const duckiesAllows = app => { const list = readDuckiesSettings().allowedApps; return !Array.isArray(list) || list.includes(app); };
 ipcMain.handle('lifeos:duckies-known-apps', event => { assertSettingsRenderer(event); return [...new Set([...knownNotificationApps, ...(readDuckiesSettings().allowedApps || [])])].sort((a, b) => a.localeCompare(b)); });
 
+let suppressedBannerKeys = new Set();
+function setRegistryShowBanner(key, value) {
+  if (process.platform !== 'win32') return;
+  const cp = require('node:child_process');
+  if (typeof cp.execFile !== 'function') return;
+  cp.execFile('reg.exe', ['add', key, '/v', 'ShowBanner', '/t', 'REG_DWORD', '/d', String(value), '/f'], err => {
+    if (err) console.warn('[Duckies] Failed to set ShowBanner on', key, err.message);
+  });
+}
+
+function syncWindowsNotificationBanners(settings) {
+  if (process.platform !== 'win32') return;
+  const cp = require('node:child_process');
+  if (typeof cp.execFile !== 'function') return;
+  const basePath = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Notifications\\Settings';
+  const shouldSuppress = Boolean(settings?.enabled && settings?.notifications && settings?.hideWindowsBanners !== false && Array.isArray(settings?.allowedApps) && settings.allowedApps.length > 0);
+
+  cp.execFile('reg.exe', ['query', basePath], (err, stdout) => {
+    if (err || !stdout) return;
+    const subkeys = stdout.split(/\r?\n/).map(l => l.trim()).filter(l => l.startsWith(basePath + '\\'));
+    const targetApps = shouldSuppress ? (settings.allowedApps || []) : [];
+    const keysToSuppress = new Set();
+
+    for (const app of targetApps) {
+      const clean = app.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (!clean) continue;
+      for (const key of subkeys) {
+        const sub = key.split('\\').pop()?.toLowerCase() || '';
+        if (sub.includes(clean)) keysToSuppress.add(key);
+      }
+      try {
+        const { DatabaseSync } = require('node:sqlite');
+        const db = new DatabaseSync(path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'Windows', 'Notifications', 'wpndatabase.db'), { readOnly: true });
+        try {
+          const rows = db.prepare(`SELECT PrimaryId FROM NotificationHandler WHERE LOWER(PrimaryId) LIKE '%${clean}%'`).all();
+          for (const row of rows) {
+            if (row.PrimaryId) keysToSuppress.add(`${basePath}\\${row.PrimaryId}`);
+          }
+        } finally { db.close(); }
+      } catch {}
+    }
+
+    for (const key of keysToSuppress) {
+      setRegistryShowBanner(key, 0);
+      suppressedBannerKeys.add(key);
+    }
+    for (const key of suppressedBannerKeys) {
+      if (!keysToSuppress.has(key)) {
+        setRegistryShowBanner(key, 1);
+        suppressedBannerKeys.delete(key);
+      }
+    }
+  });
+}
+
 function openDuckiesIfEnabled() {
-  if (readDuckiesSettings().enabled) createDuckiesWindow();
+  const current = readDuckiesSettings();
+  syncWindowsNotificationBanners(current);
+  if (current.enabled) createDuckiesWindow();
 }
 
 ipcMain.handle('lifeos:duckies-settings', event => { assertSettingsRenderer(event); return readDuckiesSettings(); });
 ipcMain.handle('lifeos:duckies-set-settings', (event, input) => {
   assertSettingsRenderer(event);
   if (!input || typeof input !== 'object' || typeof input.enabled !== 'boolean' || typeof input.notifications !== 'boolean' || typeof input.sound !== 'boolean') throw new Error('Invalid Duckies settings');
+  if (input.hideWindowsBanners !== undefined && typeof input.hideWindowsBanners !== 'boolean') throw new Error('Invalid Duckies settings');
   // allowedApps: optional allow-list of Windows app names; absent = every app may reach the island.
   if (input.allowedApps !== undefined && (!Array.isArray(input.allowedApps) || input.allowedApps.length > 200 || !input.allowedApps.every(name => typeof name === 'string' && name.length > 0 && name.length <= 80))) throw new Error('Invalid Duckies settings');
-  const { enabled, notifications, sound, allowedApps } = input;
-  const next = writeDuckiesSettings(allowedApps ? { enabled, notifications, sound, allowedApps: [...new Set(allowedApps)] } : { enabled, notifications, sound });
+  const { enabled, notifications, sound, allowedApps, hideWindowsBanners } = input;
+  const payload = { enabled, notifications, sound };
+  if (allowedApps) payload.allowedApps = [...new Set(allowedApps)];
+  if (typeof hideWindowsBanners === 'boolean') payload.hideWindowsBanners = hideWindowsBanners;
+  const next = writeDuckiesSettings(payload);
+  syncWindowsNotificationBanners(next);
   if (next.enabled) createDuckiesWindow(); else closeDuckiesWindow();
   if (duckiesWindow && !duckiesWindow.isDestroyed()) duckiesWindow.webContents.send('lifeos:duckies-settings-changed', next);
   return next;
@@ -156,6 +218,24 @@ ipcMain.handle('lifeos:duckies-clipboard', async event => {
   if (typeof clip.image?.preview === 'string' && clip.image.preview.startsWith('data:image/png;base64,') && clip.image.preview.length < 400000) return { image: { size: Number(clip.image.size) || 0, preview: clip.image.preview } };
   return typeof clip.text === 'string' && clip.text.trim() ? { text: clip.text.slice(0, 2000) } : {};
 });
+ipcMain.handle('lifeos:duckies-get-audio-media', event => {
+  assertDuckiesWindow(event);
+  return lastAudioMediaState;
+});
+ipcMain.on('lifeos:duckies-media-control', safeListener((event, action) => {
+  assertDuckiesWindow(event);
+  if (!duckiesAudioMediaProcess || typeof action !== 'string') return;
+  const valid = ['playPause', 'next', 'previous'];
+  if (valid.includes(action)) {
+    try { duckiesAudioMediaProcess.stdin?.write(`${action}\r\n`); } catch {}
+  }
+}));
+ipcMain.on('lifeos:duckies-set-volume', safeListener((event, level) => {
+  assertDuckiesWindow(event);
+  if (!duckiesAudioMediaProcess || typeof level !== 'number' || isNaN(level)) return;
+  const scalar = Math.max(0, Math.min(1, level > 1 ? level / 100 : level));
+  try { duckiesAudioMediaProcess.stdin?.write(`setVolume ${scalar.toFixed(3)}\r\n`); } catch {}
+}));
 ipcMain.on('lifeos:notify', safeListener((event, input) => {
   assertDuckiesRenderer(event);
   if (!input || typeof input.title !== 'string') throw new Error('Invalid notification');
@@ -204,6 +284,13 @@ function startWindowsNotifications() {
       if (item?.type !== 'toast' || !duckiesWindow || duckiesWindow.isDestroyed() || !readDuckiesSettings().notifications) continue;
       if (item.app) knownNotificationApps.add(String(item.app).slice(0, 80));
       if (!duckiesAllows(String(item.app || 'Windows'))) continue;
+      if (item.appId && readDuckiesSettings().hideWindowsBanners !== false) {
+        const key = `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Notifications\\Settings\\${item.appId}`;
+        if (!suppressedBannerKeys.has(key)) {
+          setRegistryShowBanner(key, 0);
+          suppressedBannerKeys.add(key);
+        }
+      }
       const title = String(item.title || item.app || 'Windows').slice(0, 80);
       if (item.app === 'Discord') {
         // Discord: avatar + username + "N New Messages", like its own toast.
@@ -220,10 +307,51 @@ function stopWindowsNotifications() {
   windowsNotifications?.kill();
   windowsNotifications = undefined;
 }
+
+let duckiesAudioMediaProcess;
+let lastAudioMediaState = { volume: null, media: null };
+
+function startDuckiesAudioMedia() {
+  if (process.platform !== 'win32' || duckiesAudioMediaProcess) return;
+  try {
+    const script = path.join(app.getPath('userData'), 'duckies-media-audio.ps1');
+    fs.writeFileSync(script, fs.readFileSync(path.join(__dirname, 'duckies-media-audio.ps1')));
+    duckiesAudioMediaProcess = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-STA', '-ExecutionPolicy', 'Bypass', '-File', script], { windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'] });
+  } catch (error) { console.error('Duckies audio/media listener unavailable:', error); return; }
+  let buffer = '';
+  duckiesAudioMediaProcess.stdout?.on('data', chunk => {
+    buffer += chunk;
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() || '';
+    for (const line of lines) {
+      let item;
+      try { item = JSON.parse(line); } catch { continue; }
+      if (!duckiesWindow || duckiesWindow.isDestroyed()) continue;
+      if (item?.type === 'volume') {
+        lastAudioMediaState.volume = item;
+        duckiesWindow.webContents.send('lifeos:duckies-volume', item);
+      } else if (item?.type === 'media') {
+        lastAudioMediaState.media = item;
+        duckiesWindow.webContents.send('lifeos:duckies-media', item);
+      }
+    }
+  });
+  duckiesAudioMediaProcess.on('exit', () => { duckiesAudioMediaProcess = undefined; });
+}
+
+function stopDuckiesAudioMedia() {
+  if (duckiesAudioMediaProcess) {
+    try { duckiesAudioMediaProcess.stdin?.write('exit\r\n'); } catch {}
+    duckiesAudioMediaProcess.kill();
+    duckiesAudioMediaProcess = undefined;
+  }
+}
+
 function closeDuckiesWindow() {
   if (duckiesWindow && !duckiesWindow.isDestroyed()) duckiesWindow.close();
   duckiesWindow = undefined;
   stopWindowsNotifications();
+  stopDuckiesAudioMedia();
 }
 function resizeDuckies(height, width) {
   if (!duckiesWindow || duckiesWindow.isDestroyed()) return;
@@ -246,9 +374,10 @@ function createDuckiesWindow() {
   duckiesWindow.setShape([{ x: idleX, y: 0, width: idleWidth, height: idleHeight }]);
   duckiesWindow.setAlwaysOnTop(true, 'floating');
   duckiesWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  duckiesWindow.on('closed', () => { duckiesWindow = undefined; stopWindowsNotifications(); });
+  duckiesWindow.on('closed', () => { duckiesWindow = undefined; stopWindowsNotifications(); stopDuckiesAudioMedia(); });
   duckiesWindow.loadURL(`http://127.0.0.1:${port}/duckies`).catch(console.error);
   startWindowsNotifications();
+  startDuckiesAudioMedia();
 }
 
 const port = Number(process.env.PORT || 63027);
@@ -565,6 +694,15 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   quitting = true;
+  for (const key of suppressedBannerKeys) {
+    try {
+      const cp = require('node:child_process');
+      if (typeof cp.execFileSync === 'function') {
+        cp.execFileSync('reg.exe', ['add', key, '/v', 'ShowBanner', '/t', 'REG_DWORD', '/d', '1', '/f']);
+      }
+    } catch {}
+  }
+  suppressedBannerKeys.clear();
   stopWindowsNotifications();
   stopServer();
 });

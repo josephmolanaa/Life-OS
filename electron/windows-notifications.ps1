@@ -24,8 +24,10 @@ while ($true) {
     $seen[$n.Id] = $true
     $app = ''
     try { $app = $n.AppInfo.DisplayInfo.DisplayName } catch {}
+    $appId = ''
+    try { $appId = $n.AppInfo.Id } catch {}
     $texts = @()
     try { $texts = @($n.Notification.Visual.GetBinding([Windows.UI.Notifications.KnownNotificationBindings]::ToastGeneric).GetTextElements() | ForEach-Object { $_.Text }) } catch {}
-    [Console]::Out.WriteLine((@{ type = 'toast'; app = "$app"; title = "$($texts | Select-Object -First 1)"; body = (($texts | Select-Object -Skip 1) -join ' ') } | ConvertTo-Json -Compress))
+    [Console]::Out.WriteLine((@{ type = 'toast'; app = "$app"; appId = "$appId"; title = "$($texts | Select-Object -First 1)"; body = (($texts | Select-Object -Skip 1) -join ' ') } | ConvertTo-Json -Compress))
   }
 }

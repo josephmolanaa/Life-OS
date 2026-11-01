@@ -1,5 +1,5 @@
 ﻿import { NextResponse } from 'next/server';
-import { validTaskDate, validTaskTime } from '@/lib/todoist';
+import { validTaskDate, validTaskTime, validTimeRange, parseTodoRow, encodeTimeMetadata } from '@/lib/todoist';
 import { createClient } from '@/lib/supabase/server';
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -14,7 +14,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const { id } = await params;
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return NextResponse.json({ error: 'Invalid todo ID' }, { status: 400 });
 
-  const updateData: { done?: boolean; label?: string; priority?: 'LOW'|'MEDIUM'|'HIGH'; due_date?: string | null; due_time?: string | null } = {};
+  const updateData: { done?: boolean; label?: string; priority?: 'LOW'|'MEDIUM'|'HIGH'; due_date?: string | null; due_time?: string | null; start_time?: string | null; end_time?: string | null } = {};
   if (payload.done !== undefined) {
     if (typeof payload.done !== 'boolean') return NextResponse.json({ error: 'done must be boolean' }, { status: 400 });
     updateData.done = payload.done;
@@ -43,18 +43,48 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     if (existing.data.list_kind !== 'task') return NextResponse.json({ error: 'Only tasks can have due times' }, { status: 400 });
     updateData.due_time = time;
   }
+  const startTime = (body as { start_time?: unknown }).start_time;
+  const endTime = (body as { end_time?: unknown }).end_time;
+  if (startTime !== undefined || endTime !== undefined) {
+    if (!validTimeRange(startTime, endTime)) return NextResponse.json({ error: 'Invalid time range: start must be before end' }, { status: 400 });
+    updateData.start_time = (startTime as string | null) ?? null;
+    updateData.end_time = (endTime as string | null) ?? null;
+  }
   const previous = payload.done !== undefined
     ? await supabase.from('todos').select('done,list_kind').eq('id', id).eq('user_id', user.id).single()
     : null;
   if (!Object.keys(updateData).length) return NextResponse.json({ error: 'No changes supplied' }, { status: 400 });
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('todos')
     .update({ ...updateData, ...(payload.done !== undefined ? { updated_at: new Date().toISOString() } : {}) })
     .eq('id', id)
     .eq('user_id', user.id)
     .select()
     .single();
+
+  // Fallback if start_time or end_time column missing from schema
+  if (error && (['42703', 'PGRST204'].includes(error.code) || /start_time|end_time/i.test(error.message))) {
+    delete updateData.start_time;
+    delete updateData.end_time;
+    if (startTime !== undefined || endTime !== undefined) {
+      let baseLabel = updateData.label;
+      if (!baseLabel) {
+        const cur = await supabase.from('todos').select('label').eq('id', id).eq('user_id', user.id).single();
+        baseLabel = cur.data?.label || '';
+      }
+      updateData.label = encodeTimeMetadata(baseLabel || '', startTime, endTime);
+    }
+    const retry = await supabase
+      .from('todos')
+      .update({ ...updateData, ...(payload.done !== undefined ? { updated_at: new Date().toISOString() } : {}) })
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .select()
+      .single();
+    data = retry.data;
+    error = retry.error;
+  }
 
   if (error?.code === '23505') return NextResponse.json({ error: 'A todo with this label already exists' }, { status: 409 });
   if (error?.code === 'PGRST116') return NextResponse.json({ error: 'Todo not found' }, { status: 404 });
@@ -68,7 +98,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     const count = Math.max(0, Number(current.data?.count || 0) + delta);
     await supabase.from('contributions').upsert({ user_id: user.id, date, count }, { onConflict: 'user_id,date' });
   }
-  return NextResponse.json(data);
+  return NextResponse.json(parseTodoRow(data));
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {

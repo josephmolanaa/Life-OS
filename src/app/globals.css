@@ -4,8 +4,9 @@
 .duckiesRoute { --spring: linear(0, 0.024, 0.074, 0.142, 0.223, 0.309, 0.397, 0.483, 0.564, 0.64, 0.709, 0.771, 0.824, 0.87, 0.909, 0.941, 0.967, 0.988, 1.004, 1.015, 1.024, 1.029, 1.032, 1.033, 1.033, 1.032, 1.03, 1.028, 1.025, 1.022, 1.019, 1.016, 1.013, 1.011, 1.009, 1.007, 1.005, 1.004, 1.003, 1.002, 1); height: 100vh; background: transparent; display: flex; justify-content: center; align-items: flex-start; padding-top: 0; }
 html:has(.duckiesRoute), body:has(.duckiesRoute) { overflow: hidden; scrollbar-width: none; background: transparent !important; }
 body:has(.duckiesRoute) .floatingAiButton, body:has(.duckiesRoute) .floatingAiPanel { display: none !important; }
-.island { --mute: #98989d; position: relative; width: 72px; height: 36px; background: #000; color: #fff; border-radius: 18px; overflow: hidden; font-family: system-ui, -apple-system, 'SF Pro Text', 'Segoe UI Variable Text', 'Segoe UI', sans-serif; font-feature-settings: 'tnum'; -webkit-font-smoothing: antialiased; box-shadow: inset 0 0 0 .5px rgba(255,255,255,.14); transition: width .5s var(--spring), height .5s var(--spring), border-radius .5s var(--spring), scale .25s ease; user-select: none; will-change: width, height; }
+.island { --mute: #98989d; position: relative; width: 72px; height: 36px; background: #000; color: #fff; border-radius: 18px; overflow: clip; font-family: system-ui, -apple-system, 'SF Pro Text', 'Segoe UI Variable Text', 'Segoe UI', sans-serif; font-feature-settings: 'tnum'; -webkit-font-smoothing: antialiased; box-shadow: inset 0 0 0 .5px rgba(255,255,255,.14); transition: width .5s var(--spring), height .5s var(--spring), border-radius .5s var(--spring), scale .25s ease; user-select: none; will-change: width, height; }
 .island.compact:hover { scale: 1.02; }
+.island.volume { width: 230px !important; height: 36px !important; border-radius: 18px; }
 .island.toast { border-radius: 32px; }
 .island.expanded { width: 560px !important; height: 230px !important; border-radius: 42px; }
 .island button { font: inherit; color: inherit; }
@@ -13,7 +14,31 @@ body:has(.duckiesRoute) .floatingAiButton, body:has(.duckiesRoute) .floatingAiPa
 .islandLayer.on { opacity: 1; pointer-events: auto; animation: islandIn .38s var(--spring) both; }
 .islandLayer.toast.on { animation: islandPop .5s var(--spring) .12s both; }
 .islandLayer::before { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; transition: box-shadow .35s ease; }
+.islandVolume { width: 230px; height: 36px; display: flex; align-items: center; gap: 10px; padding: 0 14px; }
+.islandVolumeIcon { width: 24px; height: 24px; display: grid; place-items: center; border: 0; background: transparent; color: #fff; cursor: pointer; padding: 0; flex: none; transition: scale .15s ease; }
+.islandVolumeIcon:active { scale: .88; }
+.islandVolumeTrack { flex: 1; height: 10px; border-radius: 999px; background: rgba(255,255,255,.22); overflow: hidden; cursor: pointer; position: relative; }
+.islandVolumeFill { height: 100%; border-radius: inherit; background: #fff; transition: width .1s ease-out; }
 .islandCompact { width: max-content; min-width: 72px; height: 36px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; border: 0; background: transparent; cursor: pointer; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.islandCompact.mediaPlay { display: flex; align-items: center; gap: 8px; padding: 0 12px; max-width: 260px; transition: max-width .3s var(--spring); }
+.islandCompact.mediaPlay.lyricsMode { max-width: 400px; padding: 0 14px; }
+.islandCompact.mediaPlay.lyricsMode .islandCompactMediaTitle { max-width: 300px; font-size: 12px; font-weight: 600; letter-spacing: -.01em; }
+.islandCompactMediaThumb { width: 20px; height: 20px; border-radius: 5px; overflow: hidden; display: grid; place-items: center; flex: none; background: #1c1c1e; }
+.islandCompactMediaThumb img { width: 100%; height: 100%; object-fit: cover; }
+.islandCompactMediaThumb .on { color: #30d158; }
+.islandCompactMediaTitle { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; }
+.islandCompactMediaTitle span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.islandWaveform { display: inline-flex; align-items: flex-end; gap: 2.5px; height: 14px; }
+.islandWaveform span { width: 2.5px; height: 4px; border-radius: 1px; background: #30d158; transition: height .2s ease; }
+.islandWaveform.playing span { animation: islandWave 1s ease-in-out infinite alternate; }
+.islandWaveform.playing span:nth-child(1) { animation-duration: .8s; animation-delay: 0s; }
+.islandWaveform.playing span:nth-child(2) { animation-duration: 1.1s; animation-delay: .2s; }
+.islandWaveform.playing span:nth-child(3) { animation-duration: .7s; animation-delay: .4s; }
+.islandWaveform.playing span:nth-child(4) { animation-duration: .95s; animation-delay: .1s; }
+.islandWaveform.mini { height: 10px; }
+.islandWaveform.mini span { width: 2px; }
+@keyframes islandWave { 0% { height: 3px; } 50% { height: 14px; } 100% { height: 6px; } }
 /* Idle: duck | clock | bell in a symmetric grid so the clock sits on the island's true center. */
 .islandCompact.idle { display: grid; grid-template-columns: 28px auto 28px; column-gap: 14px; justify-content: center; padding: 0 5px; cursor: default; }
 .islandCompact.idle .islandExpand { display: contents; }
@@ -23,7 +48,8 @@ body:has(.duckiesRoute) .floatingAiButton, body:has(.duckiesRoute) .floatingAiPa
 .islandBell:hover { background: rgba(255,255,255,.12); color: #fff; }
 .islandBell:active { scale: .88; }
 .islandBell.on { background: #5e5ce6; color: #fff; box-shadow: 0 0 0 1px rgba(255,255,255,.25), 0 0 14px rgba(94,92,230,.5); }
-.islandCompact.live { gap: 9px; padding: 0 16px 0 12px; }
+.islandCompact.live { display: grid; grid-template-columns: 28px auto 28px; column-gap: 14px; align-items: center; justify-content: center; padding: 0 10px; }
+.islandCompact.live .islandRing { justify-self: center; }
 .islandGap { width: 20px; flex: 0 0 20px; }
 .islandLead { display: inline-flex; align-items: center; gap: 7px; }
 .pixelDuck { display: block; flex: none; image-rendering: pixelated; }
@@ -41,7 +67,10 @@ body:has(.duckiesRoute) .floatingAiButton, body:has(.duckiesRoute) .floatingAiPa
 .islandToastAvatar { width: 40px; height: 40px; flex: 0 0 40px; border-radius: 50%; object-fit: cover; margin-right: 8px; background: #000; }
 .islandToast.blue .islandToastIcon { background: #64d2ff; }
 .islandToast.amber .islandToastIcon { background: #ffd60a; }
-.islandPanel { width: 560px; height: 230px; display: flex; flex-direction: column; padding: 16px 22px 18px; }
+.islandPanel { position: relative; width: 560px; height: 230px; display: flex; flex-direction: column; padding: 16px 22px 18px; overflow: hidden; }
+.islandPanel:has(.islandMediaLyricsView) { padding: 10px 14px 12px; }
+.islandMediaBackdrop { position: absolute; inset: -40px; background-size: cover; background-position: center; filter: blur(36px) saturate(220%) brightness(0.5); opacity: 0.42; pointer-events: none; z-index: 0; transform: scale(1.25); border-radius: inherit; transition: opacity .4s ease; }
+.islandPanel header, .islandPanel .islandBody { position: relative; z-index: 1; }
 .islandPanel header { display: flex; align-items: center; gap: 12px; }
 .islandPanel header strong { font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
 .islandPanel nav { display: flex; gap: 2px; margin: 0 auto; padding: 3px; border-radius: 999px; background: rgba(118,118,128,.24); }
@@ -120,6 +149,67 @@ body:has(.duckiesRoute) .floatingAiButton, body:has(.duckiesRoute) .floatingAiPa
 .islandShelf li small { color: var(--mute); font-size: 10px; }
 .islandShelf li button { width: 20px; height: 20px; display: grid; place-items: center; flex: none; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--mute); cursor: pointer; }
 .islandShelf li button:hover { background: rgba(255,69,58,.2); color: #ff453a; }
+.islandTimeline { height: 100%; display: flex; flex-direction: column; gap: 10px; overflow: auto; }
+.islandTimelineHead { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.islandTimelineTabs { display: flex; gap: 2px; margin-left: auto; padding: 3px; border-radius: 999px; background: rgba(118,118,128,.24); }
+.islandTimelineTabs button { width: 34px; height: 26px; display: grid; place-items: center; border: 0; border-radius: 999px; background: transparent; color: var(--mute); cursor: pointer; font-size: 11px; font-weight: 600; transition: background .25s ease, color .25s ease; }
+.islandTimelineTabs button:hover { color: #fff; }
+.islandTimelineTabs button.active { background: rgba(255,255,255,.22); color: #fff; }
+.islandTimelineList { display: grid; gap: 6px; list-style: none; margin: 0; padding: 0; }
+.macRemindersRow { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 10px; border-radius: 14px; background: rgba(255,255,255,.07); cursor: default; }
+.macRemindersRow .macRemindersText { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.macRemindersRow .macRemindersMeta { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--mute); white-space: nowrap; }
+.macRemindersEmpty { grid-column: 1 / -1; color: var(--mute); font-size: 12px; padding: 12px 0; text-align: center; }
+.islandMediaCard { height: 100%; display: flex; gap: 16px; align-items: center; padding: 2px 4px; }
+.islandMediaArtWrap { width: 136px; height: 136px; flex: none; border-radius: 16px; overflow: hidden; background: #1c1c1e; box-shadow: 0 10px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1); }
+.islandMediaArt { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: inherit; }
+.islandMediaArtPlaceholder { width: 100%; height: 100%; display: grid; place-items: center; background: radial-gradient(circle, #2c2c2e 0%, #1c1c1e 100%); }
+.islandMediaContent { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; height: 136px; }
+.islandMediaHeaderRow { display: flex; align-items: center; justify-content: flex-end; }
+.islandMediaTrackInfo { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.islandMediaTitle { font-size: 15px; font-weight: 700; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: -.01em; }
+.islandMediaArtist { font-size: 12px; font-weight: 500; color: #a1a1aa; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.islandMediaProgressWrap { display: flex; flex-direction: column; gap: 4px; }
+.islandMediaProgressBar { width: 100%; height: 4px; border-radius: 999px; background: rgba(255, 255, 255, 0.16); overflow: hidden; }
+.islandMediaProgressBar.mini { height: 3px; }
+.islandMediaProgressFill { height: 100%; border-radius: inherit; background: #fff; transition: width .3s linear; }
+.islandMediaTimes { display: flex; justify-content: space-between; font-size: 10px; font-weight: 500; color: var(--mute); font-feature-settings: 'tnum'; }
+.islandMediaTimes.mini { font-size: 9px; }
+.islandMediaControls { display: flex; align-items: center; justify-content: space-between; }
+.islandMediaDots { display: inline-flex; align-items: center; gap: 4px; }
+.islandMediaDots span { width: 5px; height: 5px; border-radius: 50%; background: rgba(255, 255, 255, 0.25); }
+.islandMediaDots span.active { background: #fff; width: 12px; border-radius: 999px; }
+.islandMediaButtons { display: flex; align-items: center; gap: 10px; margin: 0 auto; }
+.islandMediaBtn { width: 28px; height: 28px; display: grid; place-items: center; border: 0; border-radius: 50%; background: transparent; color: #fff; cursor: pointer; padding: 0; transition: scale .15s ease, background .2s; }
+.islandMediaBtn:hover { background: rgba(255, 255, 255, 0.12); }
+.islandMediaBtn:active { scale: .9; }
+.islandMediaBtn.mini { width: 24px; height: 24px; }
+.islandMediaBtn.playPause { width: 34px; height: 34px; background: rgba(255, 255, 255, 0.2); }
+.islandMediaBtn.playPause:hover { background: rgba(255, 255, 255, 0.3); }
+.islandMediaBtn.playPause.mini { width: 28px; height: 28px; }
+.islandMediaLyricsBtn { width: 26px; height: 26px; display: grid; place-items: center; border: 0; border-radius: 50%; background: rgba(255, 255, 255, 0.08); color: var(--mute); cursor: pointer; padding: 0; transition: color .2s, background .2s; }
+.islandMediaLyricsBtn:hover { color: #fff; background: rgba(255, 255, 255, 0.18); }
+
+/* Apple-style Karaoke Lyrics view */
+.islandMediaLyricsView { height: 100%; display: flex; gap: 14px; align-items: stretch; }
+.islandLyricsSidebar { width: 140px; flex: none; display: flex; flex-direction: column; justify-content: space-between; padding: 2px 10px 2px 2px; border-right: 0.5px solid rgba(255, 255, 255, 0.1); }
+.islandLyricsSidebarTop { display: flex; align-items: center; justify-content: space-between; width: 100%; }
+.islandLyricsThumbWrap { width: 40px; height: 40px; border-radius: 10px; overflow: hidden; background: #1c1c1e; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4); flex: none; }
+.islandLyricsMeta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.islandLyricsTitle { font-size: 13px; font-weight: 700; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.islandLyricsArtist { font-size: 11px; font-weight: 500; color: #a1a1aa; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.islandLyricsProgressWrap { display: flex; flex-direction: column; gap: 3px; }
+.islandLyricsControls { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
+.islandLyricsBackBtn { display: inline-flex; align-items: center; gap: 3px; padding: 3px 8px; border: 0; border-radius: 999px; background: rgba(255, 255, 255, 0.1); color: #fff; font-size: 11px; font-weight: 600; cursor: pointer; transition: background .2s; }
+.islandLyricsBackBtn:hover { background: rgba(255, 255, 255, 0.22); }
+.islandLyricsScrollArea { flex: 1; min-width: 0; height: 100%; overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none; padding: 18px 8px 18px 4px; mask-image: linear-gradient(to bottom, transparent 0%, black 15%, black 85%, transparent 100%); -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 15%, black 85%, transparent 100%); }
+.islandLyricsScrollArea::-webkit-scrollbar { display: none; }
+.islandLyricsStatus { display: flex; align-items: center; justify-content: center; gap: 8px; height: 100%; font-size: 12px; color: #a1a1aa; }
+.islandLyricsStatus.muted { color: #71717a; text-align: center; }
+.islandLyricsList { display: flex; flex-direction: column; gap: 10px; padding: 10px 0; }
+.islandLyricLine { font-size: 14px; font-weight: 600; line-height: 1.4; color: rgba(255, 255, 255, 0.35); transition: color .3s ease, font-size .3s ease, transform .3s ease, filter .3s ease; padding: 4px 6px; border-radius: 8px; cursor: default; }
+.islandLyricLine.active { color: #ffffff; font-size: 15px; font-weight: 700; transform: scale(1.02); transform-origin: left center; text-shadow: 0 0 18px rgba(255, 255, 255, 0.45); }
+.islandLyricLine.plain { color: rgba(255, 255, 255, 0.7); font-size: 13px; }
 @keyframes islandIn { from { opacity: 0; filter: blur(8px) brightness(.7); scale: .9; } to { opacity: 1; filter: none; scale: 1; } }
 @keyframes islandPop { from { scale: .4; opacity: 0; } to { scale: 1; opacity: 1; } }
 @keyframes islandGlow { 50% { filter: drop-shadow(0 0 4px #30d158); } }

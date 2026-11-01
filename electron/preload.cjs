@@ -19,6 +19,19 @@ contextBridge.exposeInMainWorld('lifeOsDuckies', {
   readClipboard: () => ipcRenderer.invoke('lifeos:duckies-clipboard'),
   getKnownApps: () => ipcRenderer.invoke('lifeos:duckies-known-apps'),
   showNotification: input => ipcRenderer.send('lifeos:notify', { title: input.title, body: input.body || '', tone: input.tone }),
+  getAudioMedia: () => ipcRenderer.invoke('lifeos:duckies-get-audio-media'),
+  mediaControl: action => ipcRenderer.send('lifeos:duckies-media-control', action),
+  setVolume: level => ipcRenderer.send('lifeos:duckies-set-volume', level),
+  onVolumeChange: listener => {
+    const handler = (_event, data) => listener(data);
+    ipcRenderer.on('lifeos:duckies-volume', handler);
+    return () => ipcRenderer.removeListener('lifeos:duckies-volume', handler);
+  },
+  onMediaChange: listener => {
+    const handler = (_event, data) => listener(data);
+    ipcRenderer.on('lifeos:duckies-media', handler);
+    return () => ipcRenderer.removeListener('lifeos:duckies-media', handler);
+  },
   onSettings: (listener) => {
     const handler = (_event, settings) => listener(settings);
     ipcRenderer.on('lifeos:duckies-settings-changed', handler);

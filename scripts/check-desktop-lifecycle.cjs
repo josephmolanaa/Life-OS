@@ -284,6 +284,11 @@ async function checkUpdater() {
   assert.ok(duckiesApi && typeof duckiesApi.getSettings === 'function');
   assert.ok(typeof duckiesApi.setSettings === 'function');
   assert.ok(typeof duckiesApi.resize === 'function');
+  assert.ok(typeof duckiesApi.onVolumeChange === 'function');
+  assert.ok(typeof duckiesApi.onMediaChange === 'function');
+  assert.ok(typeof duckiesApi.mediaControl === 'function');
+  assert.ok(typeof duckiesApi.setVolume === 'function');
+  assert.ok(typeof duckiesApi.getAudioMedia === 'function');
 
   const duckiesDesktop = launch();
   await settle();
@@ -340,11 +345,17 @@ async function checkUpdater() {
   assert.equal(toasts().length, 1);
   assert.notEqual(lastNotification, shown);
   assert.equal(lastNotification.options.title, 'Fallback');
+  // Audio & media IPC handlers
+  assert.deepEqual(JSON.parse(JSON.stringify(await duckiesDesktop.handlers.get('lifeos:duckies-get-audio-media')(notchEvent))), { volume: null, media: null });
+  assert.doesNotThrow(() => duckiesDesktop.listeners.get('lifeos:duckies-media-control')(notchEvent, 'playPause'));
+  assert.doesNotThrow(() => duckiesDesktop.listeners.get('lifeos:duckies-set-volume')(notchEvent, 0.5));
+
   await duckiesInvoke('duckies-set-settings', { enabled: false, notifications: false, sound: false });
   assert.equal(notch.destroyed, true);
-  // spawned[0] is the bundled Next server; the notification listener is the next process started.
-  assert.equal(duckiesDesktop.spawned.length, 2, 'Windows notification listener started on open');
+  // spawned[0] is the bundled Next server; notification and audio/media listeners are the next processes started.
+  assert.equal(duckiesDesktop.spawned.length, 3, 'Windows notification and audio/media listeners started on open');
   assert.equal(duckiesDesktop.spawned[1].killed, true, 'Windows notification listener stopped on close');
+  assert.equal(duckiesDesktop.spawned[2].killed, true, 'Duckies audio/media listener stopped on close');
   console.log('Desktop Duckies OK: settings persistence, window creation/destroy, bounds validation, sender trust.');
 
   const api = exposed.lifeOsUpdater;

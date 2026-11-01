@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { validTaskDate, validTaskTime } from '@/lib/todoist';
+import { validTaskDate, validTaskTime, validTimeRange, parseTodoRow, encodeTimeMetadata } from '@/lib/todoist';
 import { createClient } from '@/lib/supabase/server';
 
 export async function GET(request: Request) {
@@ -14,7 +14,7 @@ export async function GET(request: Request) {
       supabase.from('todos').select('due_time').eq('user_id', user.id).limit(1)
     ]);
     if (dateRes.error && !['42703', 'PGRST204'].includes(dateRes.error.code)) return NextResponse.json({ error: dateRes.error.message }, { status: 500 });
-    return NextResponse.json({ dueDate: !dateRes.error, dueTime: !timeRes.error });
+    return NextResponse.json({ dueDate: !dateRes.error, dueTime: !timeRes.error, timeRange: true });
   }
   const kind = params.get('kind') || 'daily';
   const timeZone = params.get('timeZone') || 'UTC';
@@ -24,7 +24,7 @@ export async function GET(request: Request) {
   if (!['daily', 'task'].includes(kind)) return NextResponse.json({ error: 'Invalid list kind' }, { status: 400 });
   const { data, error } = await supabase.from('todos').select('*').eq('user_id', user.id).eq('list_kind', kind).order('created_at', { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  if (kind === 'task') return NextResponse.json(data);
+  if (kind === 'task') return NextResponse.json((data || []).map(parseTodoRow));
 
   // ponytail: updated_at tracks completion changes; add completion history before streaks.
   const today = calendar.format(new Date());
@@ -36,12 +36,12 @@ export async function GET(request: Request) {
       if (updateError) throw updateError;
     }));
   } catch { return NextResponse.json({ error: 'Unable to reset daily quests' }, { status: 500 }); }
-  if (!stale.length) return NextResponse.json(data);
+  if (!stale.length) return NextResponse.json((data || []).map(parseTodoRow));
   // Read again: a concurrent completion must survive rollover and appear in this response.
   const { data: updatedData, error: reloadError } = await supabase.from('todos').select('*').eq('user_id', user.id).eq('list_kind', kind).order('created_at', { ascending: false });
   if (reloadError) return NextResponse.json({ error: 'Unable to reload daily quests' }, { status: 500 });
 
-  return NextResponse.json(updatedData);
+  return NextResponse.json((updatedData || []).map(parseTodoRow));
 }
 
 export async function POST(request: Request) {
@@ -61,17 +61,44 @@ export async function POST(request: Request) {
   if (due !== undefined && (list_kind !== 'task' || !validTaskDate(due))) return NextResponse.json({ error: 'Invalid task due date' }, { status: 400 });
   const time = (body as { due_time?: unknown }).due_time;
   if (time !== undefined && (list_kind !== 'task' || !validTaskTime(time))) return NextResponse.json({ error: 'Invalid task due time' }, { status: 400 });
+  const startTime = (body as { start_time?: unknown }).start_time;
+  const endTime = (body as { end_time?: unknown }).end_time;
+  if (startTime !== undefined || endTime !== undefined) {
+    if (list_kind !== 'task') return NextResponse.json({ error: 'Time range only for tasks' }, { status: 400 });
+    if (!validTimeRange(startTime, endTime)) return NextResponse.json({ error: 'Invalid time range: start must be before end' }, { status: 400 });
+  }
 
-  const { data, error } = await supabase.from('todos').insert({
+  const insertPayload = {
     user_id: user.id,
     label: label.trim(),
     done,
     list_kind,
     priority: priority ?? 'MEDIUM',
     ...(due !== undefined ? { due_date: due } : {}),
-    ...(time !== undefined ? { due_time: time } : {})
-  }).select().single();
+    ...(time !== undefined ? { due_time: time } : {}),
+    ...(startTime !== undefined ? { start_time: startTime } : {}),
+    ...(endTime !== undefined ? { end_time: endTime } : {})
+  };
+
+  let { data, error } = await supabase.from('todos').insert(insertPayload).select().single();
+
+  // Graceful fallback if start_time or end_time columns are missing from Supabase schema
+  if (error && (['42703', 'PGRST204'].includes(error.code) || /start_time|end_time/i.test(error.message))) {
+    const fallbackPayload = {
+      user_id: user.id,
+      label: encodeTimeMetadata(label.trim(), startTime, endTime),
+      done,
+      list_kind,
+      priority: priority ?? 'MEDIUM',
+      ...(due !== undefined ? { due_date: due } : {}),
+      ...(time !== undefined ? { due_time: time } : {})
+    };
+    const fallbackRes = await supabase.from('todos').insert(fallbackPayload).select().single();
+    data = fallbackRes.data;
+    error = fallbackRes.error;
+  }
+
   if (error?.code === '23505') return NextResponse.json({ error: 'A todo with this label already exists' }, { status: 409 });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data, { status: 201 });
+  return NextResponse.json(parseTodoRow(data), { status: 201 });
 }

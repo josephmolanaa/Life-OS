@@ -1,13 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, SlidersHorizontal, Pencil, Trash2, CalendarDays, Clock } from 'lucide-react';
 import { Shell } from './finance/layout';
 import { getLang, type Lang } from '@/lib/i18n';
 import { addDays, localDate, visibleTasks, parseTaskDateInput, type Task, type TaskView } from '@/lib/todoist';
 
 type Layout = 'list' | 'board' | 'calendar';
+type TimelineTab = 'daily' | 'weekly' | 'monthly';
 import styles from './todoist.module.css';
 
 async function request(url: string, method = 'GET', body?: unknown) {
@@ -33,12 +34,15 @@ export default function TodoistWorkspace({ view }: { view: TaskView }) {
   const [month, setMonth] = useState(() => localDate().slice(0, 7) + '-01');
   const [completed, setCompleted] = useState(false);
   const [grouping, setGrouping] = useState('none');
+  const [timelineTab, setTimelineTab] = useState<TimelineTab>('monthly');
+  const [timelineAnchor, setTimelineAnchor] = useState(() => localDate());
+  const canvasRef = useRef<HTMLDivElement>(null);
   const [sort, setSort] = useState('default');
   const [priority, setPriority] = useState('all');
   const [search, setSearch] = useState('');
-  const [draft, setDraft] = useState<{ id?: string; label: string; priority: Task['priority']; due_date: string; due_time: string } | null>(null);
+  const [draft, setDraft] = useState<{ id?: string; label: string; priority: Task['priority']; due_date: string; due_time: string; start_time: string; end_time: string } | null>(null);
   const display = useRef<HTMLDetailsElement>(null);
-  const names = { inbox: 'Inbox', today: text('Today', 'Hari ini'), upcoming: text('Upcoming', 'Mendatang') };
+  const names = { inbox: 'Inbox', today: text('Today', 'Hari ini'), upcoming: text('Upcoming', 'Mendatang'), timeline: text('Timeline', 'Timeline') };
   async function load() {
     setLoading(true); setError('');
     try {
@@ -74,6 +78,229 @@ export default function TodoistWorkspace({ view }: { view: TaskView }) {
   const calendarDays = Array.from({ length: 42 }, (_, index) => addDays(calendarStart, index));
   const calendarEnd = calendarDays[calendarDays.length - 1];
   const rows = visibleTasks(tasks, view, today, start, completed, priority, search, sort, layout === 'calendar' && view === 'upcoming' ? calendarEnd : undefined);
+
+  // Notion-style horizontal Gantt Timeline computations
+  const ganttTasks = useMemo(() => {
+    if (view !== 'timeline') return [];
+    return rows.filter(task => completed || !task.done);
+  }, [rows, view, completed]);
+
+  const timelineNavTitle = useMemo(() => {
+    const d = new Date(`${timelineAnchor}T12:00:00`);
+    if (timelineTab === 'monthly') {
+      return d.toLocaleDateString(id ? 'id-ID' : 'en-US', { month: 'long', year: 'numeric' });
+    }
+    if (timelineTab === 'weekly') {
+      const day = d.getDay();
+      const mon = addDays(timelineAnchor, day === 0 ? -6 : 1 - day);
+      const sun = addDays(mon, 6);
+      const monD = new Date(`${mon}T12:00:00`);
+      const sunD = new Date(`${sun}T12:00:00`);
+      return `${monD.toLocaleDateString(id ? 'id-ID' : 'en-US', { day: 'numeric', month: 'short' })} – ${sunD.toLocaleDateString(id ? 'id-ID' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+    }
+    return d.toLocaleDateString(id ? 'id-ID' : 'en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  }, [timelineAnchor, timelineTab, id]);
+
+  const { cols, colWidth, monthBlocks, totalCanvasWidth, todayLineLeft } = useMemo(() => {
+    if (timelineTab === 'monthly') {
+      const width = 42;
+      const anchorDate = new Date(`${timelineAnchor}T12:00:00`);
+      const firstOfMonth = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), 1);
+      const startD = new Date(firstOfMonth);
+      startD.setDate(firstOfMonth.getDate() - 14);
+      const dateList = Array.from({ length: 60 }, (_, i) => {
+        const d = new Date(startD);
+        d.setDate(startD.getDate() + i);
+        return localDate(d);
+      });
+
+      const blocks: { label: string; count: number }[] = [];
+      dateList.forEach(d => {
+        const label = new Date(`${d}T12:00:00`).toLocaleDateString(id ? 'id-ID' : 'en-US', { month: 'long', year: 'numeric' });
+        const last = blocks[blocks.length - 1];
+        if (last && last.label === label) last.count++;
+        else blocks.push({ label, count: 1 });
+      });
+
+      const columnList = dateList.map(d => {
+        const dayNum = String(Number(d.slice(-2)));
+        const dow = new Date(`${d}T12:00:00`).getDay();
+        return {
+          key: d,
+          label: dayNum,
+          isToday: d === today,
+          isWeekend: dow === 0 || dow === 6
+        };
+      });
+
+      const todayIdx = dateList.indexOf(today);
+      const tLine = todayIdx !== -1 ? todayIdx * width + width / 2 : null;
+
+      return {
+        cols: columnList,
+        colWidth: width,
+        monthBlocks: blocks,
+        totalCanvasWidth: dateList.length * width,
+        todayLineLeft: tLine
+      };
+    }
+
+    if (timelineTab === 'weekly') {
+      const width = 90;
+      const anchorDate = new Date(`${timelineAnchor}T12:00:00`);
+      const dow = anchorDate.getDay();
+      const monday = new Date(anchorDate);
+      monday.setDate(anchorDate.getDate() - (dow === 0 ? 6 : dow - 1) - 7);
+      const dateList = Array.from({ length: 21 }, (_, i) => {
+        const d = new Date(monday);
+        d.setDate(monday.getDate() + i);
+        return localDate(d);
+      });
+
+      const blocks: { label: string; count: number }[] = [];
+      dateList.forEach(d => {
+        const label = new Date(`${d}T12:00:00`).toLocaleDateString(id ? 'id-ID' : 'en-US', { month: 'long', year: 'numeric' });
+        const last = blocks[blocks.length - 1];
+        if (last && last.label === label) last.count++;
+        else blocks.push({ label, count: 1 });
+      });
+
+      const columnList = dateList.map(d => {
+        const dObj = new Date(`${d}T12:00:00`);
+        const label = dObj.toLocaleDateString(id ? 'id-ID' : 'en-US', { weekday: 'short', day: 'numeric' });
+        const dayOfWeek = dObj.getDay();
+        return {
+          key: d,
+          label,
+          isToday: d === today,
+          isWeekend: dayOfWeek === 0 || dayOfWeek === 6
+        };
+      });
+
+      const todayIdx = dateList.indexOf(today);
+      const tLine = todayIdx !== -1 ? todayIdx * width + width / 2 : null;
+
+      return {
+        cols: columnList,
+        colWidth: width,
+        monthBlocks: blocks,
+        totalCanvasWidth: dateList.length * width,
+        todayLineLeft: tLine
+      };
+    }
+
+    // Daily
+    const width = 56;
+    const hours = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}:00`);
+    const blockTitle = new Date(`${timelineAnchor}T12:00:00`).toLocaleDateString(id ? 'id-ID' : 'en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    const blocks = [{ label: blockTitle, count: 24 }];
+    const columnList = hours.map(h => ({
+      key: h,
+      label: h,
+      isToday: false,
+      isWeekend: false
+    }));
+
+    let tLine: number | null = null;
+    if (timelineAnchor === today) {
+      const now = new Date();
+      tLine = (now.getHours() + now.getMinutes() / 60) * width;
+    }
+
+    return {
+      cols: columnList,
+      colWidth: width,
+      monthBlocks: blocks,
+      totalCanvasWidth: 24 * width,
+      todayLineLeft: tLine
+    };
+  }, [timelineTab, timelineAnchor, today, id]);
+
+  const getBarProps = (task: Task) => {
+    if (timelineTab === 'daily') {
+      if (task.due_date !== timelineAnchor) return null;
+      let startHour = 9;
+      let endHour = 10;
+      if (task.start_time) {
+        const [h, m] = task.start_time.split(':').map(Number);
+        startHour = h + (m || 0) / 60;
+        endHour = startHour + 1;
+        if (task.end_time) {
+          const [eh, em] = task.end_time.split(':').map(Number);
+          endHour = Math.max(startHour + 0.5, eh + (em || 0) / 60);
+        }
+      } else if (task.due_time) {
+        const [h, m] = task.due_time.split(':').map(Number);
+        startHour = h + (m || 0) / 60;
+        endHour = startHour + 1;
+      }
+
+      let progress = 0;
+      if (task.done) {
+        progress = 100;
+      } else if (timelineAnchor < today) {
+        progress = 100;
+      } else if (timelineAnchor > today) {
+        progress = 0;
+      } else if (todayLineLeft !== null) {
+        const nowHour = todayLineLeft / colWidth;
+        if (nowHour >= endHour) progress = 100;
+        else if (nowHour <= startHour) progress = 0;
+        else progress = Math.min(100, Math.max(0, ((nowHour - startHour) / (endHour - startHour)) * 100));
+      }
+
+      return {
+        left: startHour * colWidth,
+        width: Math.max(colWidth, (endHour - startHour) * colWidth),
+        progress
+      };
+    }
+
+    if (!task.due_date) return null;
+    const dateKeys = cols.map(c => c.key);
+    const idx = dateKeys.indexOf(task.due_date);
+    if (idx === -1) return null;
+    const minW = timelineTab === 'monthly' ? 120 : colWidth - 8;
+
+    let progress = 0;
+    if (task.done) {
+      progress = 100;
+    } else if (task.due_date < today) {
+      progress = 100;
+    } else if (task.due_date > today) {
+      progress = 0;
+    } else {
+      if (task.start_time && task.end_time) {
+        const [sh, sm] = task.start_time.split(':').map(Number);
+        const [eh, em] = task.end_time.split(':').map(Number);
+        const s = sh + (sm || 0) / 60;
+        const e = Math.max(s + 0.5, eh + (em || 0) / 60);
+        const now = new Date();
+        const curr = now.getHours() + now.getMinutes() / 60;
+        if (curr >= e) progress = 100;
+        else if (curr <= s) progress = 0;
+        else progress = Math.min(100, Math.max(0, ((curr - s) / (e - s)) * 100));
+      } else {
+        const now = new Date();
+        const curr = now.getHours() + now.getMinutes() / 60;
+        progress = Math.min(100, Math.max(0, (curr / 24) * 100));
+      }
+    }
+
+    return {
+      left: idx * colWidth + 2,
+      width: minW,
+      progress
+    };
+  };
+
+  useEffect(() => {
+    if (view === 'timeline' && canvasRef.current && todayLineLeft !== null) {
+      const w = canvasRef.current.clientWidth;
+      canvasRef.current.scrollLeft = Math.max(0, todayLineLeft - w / 2);
+    }
+  }, [view, timelineTab, timelineAnchor, todayLineLeft]);
+
   const days = Array.from({ length: 7 }, (_, index) => addDays(start, index));
   const dateLabel = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString(id ? 'id-ID' : 'en-US', { weekday: 'long', day: 'numeric', month: 'short' });
   const priorityLabel = (value: string) => ({ HIGH: text('High', 'Tinggi'), MEDIUM: text('Medium', 'Sedang'), LOW: text('Low', 'Rendah') }[value] || value);
@@ -85,10 +312,10 @@ export default function TodoistWorkspace({ view }: { view: TaskView }) {
     groups.set(key, [...(groups.get(key) || []), task]);
   }
   if (!groups.size) groups.set('all', []);
-  const openAdd = (date = '', time = '') => setDraft({ label: '', priority: 'MEDIUM', due_date: dates ? date : '', due_time: time });
+  const openAdd = (date = '', time = '') => setDraft({ label: '', priority: 'MEDIUM', due_date: dates ? date : '', due_time: time, start_time: '', end_time: '' });
   const heading = (key: string) => key === 'all' ? '' : key === 'overdue' ? text('Overdue', 'Terlambat') : key === 'undated' ? text('No date', 'Tanpa tanggal') : ['HIGH', 'MEDIUM', 'LOW'].includes(key) ? priorityLabel(key) : `${dateLabel(key)}${key === today ? text(' · Today', ' · Hari ini') : ''}`;
-  return <Shell title="Todoist" quickFab={false}><div className={`${styles.workspace} ${layout !== 'list' ? styles.wide : ''}`}>
-    <div className={styles.toolbar}><nav aria-label="Todoist">{(['inbox', 'today', 'upcoming'] as const).map(item => <Link key={item} href={`/todoist/${item}`} aria-current={item === view ? 'page' : undefined}>{names[item]}</Link>)}</nav>
+  return <Shell title="Todoist" quickFab={false}><div className={`${styles.workspace} ${layout !== 'list' || view === 'timeline' ? styles.wide : ''}`}>
+    <div className={styles.toolbar}><nav aria-label="Todoist">{(['inbox', 'today', 'upcoming', 'timeline'] as const).map(item => <Link key={item} href={`/todoist/${item}`} aria-current={item === view ? 'page' : undefined}>{names[item]}</Link>)}</nav>
       <div className={styles.toolbarActions}><input className={styles.search} type="search" aria-label={text('Search tasks', 'Cari tugas')} placeholder={text('Search tasks', 'Cari tugas')} value={search} onChange={event => setSearch(event.target.value)} />
       <details ref={display} className={styles.display} onKeyDown={event => { if (event.key === 'Escape') { display.current!.open = false; display.current?.querySelector('summary')?.focus(); } }}><summary aria-label={text('Display', 'Tampilan')} title={text('Display', 'Tampilan')}><SlidersHorizontal size={16} aria-hidden="true" /></summary><div className={styles.panel}>
         <fieldset><legend>Layout</legend>{(['list', 'board', 'calendar'] as const).map(value => <button key={value} type="button" aria-pressed={layout === value} onClick={() => setLayout(value)}>{value[0].toUpperCase() + value.slice(1)}</button>)}</fieldset>
@@ -107,7 +334,123 @@ export default function TodoistWorkspace({ view }: { view: TaskView }) {
     {!loading && dates && !times && !error && <p className={styles.notice}>{text('Time scheduling requires database migration 013_todos_due_time.sql.', 'Fitur jam memerlukan migrasi database 013_todos_due_time.sql.')}</p>}
     {view === 'upcoming' && layout !== 'calendar' && <><div className={styles.weekHeader}><strong>{new Date(`${start}T12:00:00`).toLocaleDateString(id ? 'id-ID' : 'en-US', { month: 'long', year: 'numeric' })}</strong><div><button aria-label={text('Previous week', 'Minggu sebelumnya')} onClick={() => setStart(addDays(start, -7))}>‹</button><button onClick={() => setStart(today)}>{names.today}</button><button aria-label={text('Next week', 'Minggu berikutnya')} onClick={() => setStart(addDays(start, 7))}>›</button></div></div><div className={styles.week}>{days.map(day => <a key={day} href={`#day-${day}`} aria-current={day === today ? 'date' : undefined}>{new Date(`${day}T12:00:00`).toLocaleDateString(id ? 'id-ID' : 'en-US', { weekday: 'short', day: 'numeric' })}</a>)}</div></>}
     {layout === 'calendar' && <div className={styles.calendarToolbar}><strong>{new Date(`${month}T12:00:00`).toLocaleDateString(id ? 'id-ID' : 'en-US', { month: 'long', year: 'numeric' })}</strong><div><button aria-label={text('Previous month', 'Bulan sebelumnya')} onClick={() => setMonth(addDays(month, -1).slice(0, 7) + '-01')}>‹</button><button onClick={() => setMonth(today.slice(0, 7) + '-01')}>{names.today}</button><button aria-label={text('Next month', 'Bulan berikutnya')} onClick={() => setMonth(addDays(monthEnd(month), 1).slice(0, 7) + '-01')}>›</button></div></div>}
-    {layout === 'calendar' && <div className={styles.calendar}><div className={styles.calendarWeek}>{['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => <strong key={day}>{text(day, ({ Mon: 'Sen', Tue: 'Sel', Wed: 'Rab', Thu: 'Kam', Fri: 'Jum', Sat: 'Sab', Sun: 'Min' } as Record<string, string>)[day])}</strong>)}</div><div className={styles.calendarGrid}>{calendarDays.map(day => { const items = rows.filter(task => task.due_date === day); return <section key={day} className={`${styles.calendarCell} ${day.slice(0, 7) !== month.slice(0, 7) ? styles.outside : ''} ${day === today ? styles.currentDay : ''}`}><time dateTime={day}>{Number(day.slice(-2))}</time>{items.map(task => <article key={task.id} className={styles.calendarTask}><span className={task.done ? styles.done : ''}>{task.due_time ? `${task.due_time.slice(0, 5)} ` : ''}{task.label}</span><button disabled={busy} aria-label={`${text('Edit', 'Ubah')} ${task.label}`} onClick={() => setDraft({ id: task.id, label: task.label, priority: task.priority, due_date: task.due_date || '', due_time: task.due_time ? task.due_time.slice(0, 5) : '' })}><Pencil size={12} /></button></article>)}<button className={styles.add} disabled={busy || !dates} aria-label={`${text('Add task', 'Tambah tugas')} ${day}`} onClick={() => openAdd(day)}><Plus size={14} /></button></section>})}</div></div>}
+    {layout === 'calendar' && <div className={styles.calendar}><div className={styles.calendarWeek}>{['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => <strong key={day}>{text(day, ({ Mon: 'Sen', Tue: 'Sel', Wed: 'Rab', Thu: 'Kam', Fri: 'Jum', Sat: 'Sab', Sun: 'Min' } as Record<string, string>)[day])}</strong>)}</div><div className={styles.calendarGrid}>{calendarDays.map(day => { const items = rows.filter(task => task.due_date === day); return <section key={day} className={`${styles.calendarCell} ${day.slice(0, 7) !== month.slice(0, 7) ? styles.outside : ''} ${day === today ? styles.currentDay : ''}`}><time dateTime={day}>{Number(day.slice(-2))}</time>{items.map(task => <article key={task.id} className={styles.calendarTask}><span className={task.done ? styles.done : ''}>{task.due_time ? `${task.due_time.slice(0, 5)} ` : ''}{task.label}</span><button disabled={busy} aria-label={`${text('Edit', 'Ubah')} ${task.label}`} onClick={() => setDraft({ id: task.id, label: task.label, priority: task.priority, due_date: task.due_date || '', due_time: task.due_time ? task.due_time.slice(0, 5) : '', start_time: task.start_time || '', end_time: task.end_time || '' })}><Pencil size={12} /></button></article>)}<button className={styles.add} disabled={busy || !dates} aria-label={`${text('Add task', 'Tambah tugas')} ${day}`} onClick={() => openAdd(day)}><Plus size={14} /></button></section>})}</div></div>}
+
+    {view === 'timeline' && <div className={styles.timelineWrapper}>
+      <div className={styles.timelineToolbar}>
+        <div className={styles.timelineNav}>
+          <button type="button" className={styles.timelineNavBtn} aria-label={text('Previous', 'Sebelumnya')} onClick={() => {
+            if (timelineTab === 'monthly') {
+              const d = new Date(`${timelineAnchor}T12:00:00`);
+              d.setMonth(d.getMonth() - 1);
+              setTimelineAnchor(localDate(d));
+            } else if (timelineTab === 'weekly') {
+              setTimelineAnchor(addDays(timelineAnchor, -7));
+            } else {
+              setTimelineAnchor(addDays(timelineAnchor, -1));
+            }
+          }}>‹</button>
+          <button type="button" className={styles.timelineNavBtn} onClick={() => setTimelineAnchor(today)}>{names.today}</button>
+          <button type="button" className={styles.timelineNavBtn} aria-label={text('Next', 'Berikutnya')} onClick={() => {
+            if (timelineTab === 'monthly') {
+              const d = new Date(`${timelineAnchor}T12:00:00`);
+              d.setMonth(d.getMonth() + 1);
+              setTimelineAnchor(localDate(d));
+            } else if (timelineTab === 'weekly') {
+              setTimelineAnchor(addDays(timelineAnchor, 7));
+            } else {
+              setTimelineAnchor(addDays(timelineAnchor, 1));
+            }
+          }}>›</button>
+          <span className={styles.timelineNavTitle}>{timelineNavTitle}</span>
+        </div>
+        <div className={styles.timelineControls}>
+          <div className={styles.timelineViewSelect}>
+            {(['daily', 'weekly', 'monthly'] as const).map(tab => (
+              <button key={tab} type="button" className={`${styles.timelineViewBtn} ${timelineTab === tab ? styles.active : ''}`} onClick={() => setTimelineTab(tab)}>
+                {tab === 'daily' ? text('Daily', 'Harian') : tab === 'weekly' ? text('Weekly', 'Mingguan') : text('Monthly', 'Bulanan')}
+              </button>
+            ))}
+          </div>
+          <button type="button" className={styles.timelineNewBtn} onClick={() => openAdd(timelineAnchor)}>
+            <Plus size={14} /> {text('New', 'Baru')}
+          </button>
+        </div>
+      </div>
+
+      <div className={styles.ganttContainer}>
+        <div className={styles.ganttSidebar}>
+          <div className={styles.ganttSidebarHeader}>
+            <span>{text('Tasks', 'Tugas')}</span>
+            <span className={styles.ganttSidebarCount}>{ganttTasks.length}</span>
+          </div>
+          <div className={styles.ganttSidebarRows}>
+            {ganttTasks.map(task => (
+              <div key={task.id} className={styles.ganttSidebarRow} onClick={() => setDraft({ id: task.id, label: task.label, priority: task.priority, due_date: task.due_date || '', due_time: task.due_time ? task.due_time.slice(0, 5) : '', start_time: task.start_time || '', end_time: task.end_time || '' })}>
+                <span className={styles.ganttRowBullet}>▶</span>
+                <span className={`${styles.ganttRowLabel} ${task.done ? styles.done : ''}`}>{task.label}</span>
+              </div>
+            ))}
+            {!ganttTasks.length && <p className={styles.timelineEmpty}>{text('No tasks yet', 'Belum ada tugas')}</p>}
+          </div>
+          <button type="button" className={styles.ganttSidebarAdd} onClick={() => openAdd(timelineAnchor)}>
+            <Plus size={14} /> {text('New', 'Baru')}
+          </button>
+        </div>
+
+        <div className={styles.ganttCanvas} ref={canvasRef}>
+          <div className={styles.ganttHeader} style={{ width: totalCanvasWidth }}>
+            <div className={styles.ganttMonthsRow}>
+              {monthBlocks.map((b, idx) => (
+                <div key={idx} className={styles.ganttMonthBlock} style={{ width: b.count * colWidth }}>
+                  {b.label}
+                </div>
+              ))}
+            </div>
+            <div className={styles.ganttColsRow}>
+              {cols.map((c, idx) => (
+                <div key={idx} className={styles.ganttColHeader} style={{ width: colWidth }}>
+                  {c.isToday ? <span className={styles.todayBadge}>{c.label}</span> : c.label}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className={styles.ganttGrid} style={{ width: totalCanvasWidth }}>
+            {todayLineLeft !== null && <div className={styles.ganttTodayLine} style={{ left: todayLineLeft }} />}
+            <div className={styles.ganttBackgroundGrid}>
+              {cols.map((c, idx) => (
+                <div key={idx} className={`${styles.ganttGridCol} ${c.isWeekend ? styles.ganttWeekendCol : ''}`} style={{ width: colWidth }} />
+              ))}
+            </div>
+            <div className={styles.ganttRows}>
+              {ganttTasks.map(task => {
+                const bar = getBarProps(task);
+                return (
+                  <div key={task.id} className={styles.ganttRow}>
+                    {bar && (
+                      <div className={`${styles.ganttBar} ${bar.progress >= 100 ? styles.ganttBarCompleted : ''}`} style={{ left: bar.left, width: bar.width }} title={`${task.label} (${task.start_time || ''} - ${task.end_time || ''})${bar.progress > 0 ? ` · ${Math.round(bar.progress)}%` : ''}`} onClick={() => setDraft({ id: task.id, label: task.label, priority: task.priority, due_date: task.due_date || '', due_time: task.due_time ? task.due_time.slice(0, 5) : '', start_time: task.start_time || '', end_time: task.end_time || '' })}>
+                        {bar.progress > 0 && (
+                          <div className={styles.ganttBarProgress} style={{ width: `${bar.progress}%` }} />
+                        )}
+                        <span className={styles.ganttBarIcon}>▶</span>
+                        <span className={`${styles.ganttBarText} ${task.done ? styles.done : ''}`}>{task.label}</span>
+                        {(task.start_time || task.due_time) && (
+                          <span className={styles.ganttBarTime}>
+                            {task.start_time && task.end_time ? `${task.start_time.slice(0, 5)}–${task.end_time.slice(0, 5)}` : (task.start_time || task.due_time)?.slice(0, 5)}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>}
+
     {draft && <form className={styles.editor} onSubmit={event => { event.preventDefault(); void mutate(async () => {
       const parsed = dates ? parseTaskDateInput(draft.label, today) : { label: draft.label, dueDate: null, dueTime: null };
       const finalLabel = (parsed.dueDate || (times && parsed.dueTime)) ? (parsed.label || draft.label) : draft.label;
@@ -118,7 +461,9 @@ export default function TodoistWorkspace({ view }: { view: TaskView }) {
         priority: draft.priority,
         ...(!draft.id ? { list_kind: 'task' } : {}),
         ...(dates ? { due_date: finalDate } : {}),
-        ...(times ? { due_time: finalTime } : {})
+        ...(times ? { due_time: finalTime || draft.start_time || null } : {}),
+        start_time: draft.start_time || null,
+        end_time: draft.end_time || null
       });
       setTasks(current => draft.id ? current.map(task => task.id === saved.id ? saved : task) : [saved, ...current]); setDraft(null);
     }); }}>
@@ -141,16 +486,18 @@ export default function TodoistWorkspace({ view }: { view: TaskView }) {
       <div className={styles.editorFields}>
         <label>{text('Date', 'Tanggal')}<input type="date" min="1000-01-01" max="9999-12-31" disabled={busy || !dates} value={draft.due_date} onChange={event => setDraft({ ...draft, due_date: event.target.value })} /></label>
         <label>{text('Time', 'Waktu')}<input type="time" disabled={busy || !times} value={draft.due_time} onChange={event => setDraft({ ...draft, due_time: event.target.value })} /></label>
+        <label>{text('Start', 'Mulai')}<input type="time" disabled={busy} value={draft.start_time} onChange={event => setDraft({ ...draft, start_time: event.target.value })} /></label>
+        <label>{text('End', 'Selesai')}<input type="time" disabled={busy} value={draft.end_time} onChange={event => setDraft({ ...draft, end_time: event.target.value })} /></label>
         <label>{text('Priority', 'Prioritas')}<select disabled={busy} value={draft.priority} onChange={event => setDraft({ ...draft, priority: event.target.value as Task['priority'] })}>{(['LOW', 'MEDIUM', 'HIGH'] as const).map(value => <option key={value} value={value}>{priorityLabel(value)}</option>)}</select></label>
       </div>
       <div className={styles.actions}><button type="button" disabled={busy} onClick={() => setDraft(null)}>{text('Cancel', 'Batal')}</button><button className="btn" disabled={busy || !draft.label.trim()}>{text('Save task', 'Simpan tugas')}</button></div>
     </form>}
-    {loading ? <div aria-label={text('Loading tasks', 'Memuat tugas')} role="status" className={styles.skeleton}>{[0, 1, 2].map(key => <div key={key} />)}</div> : layout === 'calendar' ? (view === 'inbox' && rows.some(task => !task.due_date) && <div className={styles.undatedSection}><h3>{text('No date', 'Tanpa tanggal')}</h3><div className={styles.list}>{rows.filter(task => !task.due_date).map(task => <article key={task.id} className={styles.task}><input className={styles.check} type="checkbox" checked={task.done} disabled={busy} aria-label={`${text('Complete', 'Selesaikan')} ${task.label}`} onChange={() => void mutate(async () => { const saved = await request(`/api/todos/${task.id}`, 'PUT', { done: !task.done }); setTasks(current => current.map(row => row.id === task.id ? saved : row)); })} /><div className={styles.taskBody}><span className={task.done ? styles.done : ''}>{task.label}</span><small>{task.due_time && <><Clock size={12} /> {task.due_time.slice(0, 5)} · </>} {priorityLabel(task.priority)}</small></div><div className={styles.rowActions}><button disabled={busy} aria-label={`${text('Edit', 'Ubah')} ${task.label}`} onClick={() => setDraft({ id: task.id, label: task.label, priority: task.priority, due_date: task.due_date || '', due_time: task.due_time ? task.due_time.slice(0, 5) : '' })}><Pencil size={14} /></button><button disabled={busy} aria-label={`${text('Delete', 'Hapus')} ${task.label}`} onClick={() => void mutate(async () => { await request(`/api/todos/${task.id}`, 'DELETE'); setTasks(current => current.filter(row => row.id !== task.id)); if (draft?.id === task.id) setDraft(null); })}><Trash2 size={14} /></button></div></article>)}</div></div>) : <div className={layout === 'board' ? styles.board : styles.list}>{Array.from(groups, ([key, items]) => <section id={`day-${key}`} key={key} className={styles.group}>
+    {loading ? <div aria-label={text('Loading tasks', 'Memuat tugas')} role="status" className={styles.skeleton}>{[0, 1, 2].map(key => <div key={key} />)}</div> : layout === 'calendar' ? (view === 'inbox' && rows.some(task => !task.due_date) && <div className={styles.undatedSection}><h3>{text('No date', 'Tanpa tanggal')}</h3><div className={styles.list}>{rows.filter(task => !task.due_date).map(task => <article key={task.id} className={styles.task}><input className={styles.check} type="checkbox" checked={task.done} disabled={busy} aria-label={`${text('Complete', 'Selesaikan')} ${task.label}`} onChange={() => void mutate(async () => { const saved = await request(`/api/todos/${task.id}`, 'PUT', { done: !task.done }); setTasks(current => current.map(row => row.id === task.id ? saved : row)); })} /><div className={styles.taskBody}><span className={task.done ? styles.done : ''}>{task.label}</span><small>{task.due_time && <><Clock size={12} /> {task.due_time.slice(0, 5)} · </>}{task.start_time && task.end_time && <><Clock size={12} /> {task.start_time.slice(0, 5)}–{task.end_time.slice(0, 5)} · </>}{task.start_time && !task.end_time && <><Clock size={12} /> {task.start_time.slice(0, 5)} · </>} {priorityLabel(task.priority)}</small></div><div className={styles.rowActions}><button disabled={busy} aria-label={`${text('Edit', 'Ubah')} ${task.label}`} onClick={() => setDraft({ id: task.id, label: task.label, priority: task.priority, due_date: task.due_date || '', due_time: task.due_time ? task.due_time.slice(0, 5) : '', start_time: task.start_time || '', end_time: task.end_time || '' })}><Pencil size={14} /></button><button disabled={busy} aria-label={`${text('Delete', 'Hapus')} ${task.label}`} onClick={() => void mutate(async () => { await request(`/api/todos/${task.id}`, 'DELETE'); setTasks(current => current.filter(row => row.id !== task.id)); if (draft?.id === task.id) setDraft(null); })}><Trash2 size={14} /></button></div></article>)}</div></div>) : view === 'timeline' ? null : <div className={layout === 'board' ? styles.board : styles.list}>{Array.from(groups, ([key, items]) => <section id={`day-${key}`} key={key} className={styles.group}>
       {heading(key) && <h3 className={key === 'overdue' ? styles.overdue : ''}>{heading(key)}</h3>}
       {items.map(task => <article key={task.id} className={styles.task}>
         <input className={styles.check} type="checkbox" checked={task.done} disabled={busy} aria-label={`${text('Complete', 'Selesaikan')} ${task.label}`} onChange={() => void mutate(async () => { const saved = await request(`/api/todos/${task.id}`, 'PUT', { done: !task.done }); setTasks(current => current.map(row => row.id === task.id ? saved : row)); })} />
-        <div className={styles.taskBody}><span className={task.done ? styles.done : ''}>{task.label}</span><small className={task.due_date && task.due_date < today && !task.done ? styles.overdue : ''}>{task.due_date && <><CalendarDays size={12} /> {dateLabel(task.due_date)} · </>}{task.due_time && <><Clock size={12} /> {task.due_time.slice(0, 5)} · </>} {priorityLabel(task.priority)}</small></div>
-        <div className={styles.rowActions}><button disabled={busy} aria-label={`${text('Edit', 'Ubah')} ${task.label}`} onClick={() => setDraft({ id: task.id, label: task.label, priority: task.priority, due_date: task.due_date || '', due_time: task.due_time ? task.due_time.slice(0, 5) : '' })}><Pencil size={14} /></button><button disabled={busy} aria-label={`${text('Delete', 'Hapus')} ${task.label}`} onClick={() => void mutate(async () => { await request(`/api/todos/${task.id}`, 'DELETE'); setTasks(current => current.filter(row => row.id !== task.id)); if (draft?.id === task.id) setDraft(null); })}><Trash2 size={14} /></button></div>
+        <div className={styles.taskBody}><span className={task.done ? styles.done : ''}>{task.label}</span><small className={task.due_date && task.due_date < today && !task.done ? styles.overdue : ''}>{task.due_date && <><CalendarDays size={12} /> {dateLabel(task.due_date)} · </>}{task.due_time && <><Clock size={12} /> {task.due_time.slice(0, 5)} · </>}{task.start_time && task.end_time && <><Clock size={12} /> {task.start_time.slice(0, 5)}–{task.end_time.slice(0, 5)} · </>}{task.start_time && !task.end_time && <><Clock size={12} /> {task.start_time.slice(0, 5)} · </>} {priorityLabel(task.priority)}</small></div>
+        <div className={styles.rowActions}><button disabled={busy} aria-label={`${text('Edit', 'Ubah')} ${task.label}`} onClick={() => setDraft({ id: task.id, label: task.label, priority: task.priority, due_date: task.due_date || '', due_time: task.due_time ? task.due_time.slice(0, 5) : '', start_time: task.start_time || '', end_time: task.end_time || '' })}><Pencil size={14} /></button><button disabled={busy} aria-label={`${text('Delete', 'Hapus')} ${task.label}`} onClick={() => void mutate(async () => { await request(`/api/todos/${task.id}`, 'DELETE'); setTasks(current => current.filter(row => row.id !== task.id)); if (draft?.id === task.id) setDraft(null); })}><Trash2 size={14} /></button></div>
       </article>)}
       {!items.length && key === 'all' && <p className={styles.empty}>{text('No tasks in this view.', 'Tidak ada tugas dalam tampilan ini.')}</p>}
       <button className={styles.add} disabled={loading || busy || (view !== 'inbox' && !dates)} onClick={() => openAdd(/^\d{4}-/.test(key) ? key : view === 'today' ? today : '')}><Plus size={16} />{text('Add task', 'Tambah tugas')}</button>

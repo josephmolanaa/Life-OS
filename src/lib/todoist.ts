@@ -1,5 +1,5 @@
-export type Task = { id: string; label: string; done: boolean; priority: 'LOW' | 'MEDIUM' | 'HIGH'; due_date?: string | null; due_time?: string | null; created_at?: string };
-export type TaskView = 'inbox' | 'today' | 'upcoming';
+export type Task = { id: string; label: string; done: boolean; priority: 'LOW' | 'MEDIUM' | 'HIGH'; due_date?: string | null; due_time?: string | null; start_time?: string | null; end_time?: string | null; created_at?: string };
+export type TaskView = 'inbox' | 'today' | 'upcoming' | 'timeline';
 export function validTaskDate(value: unknown): value is string | null {
   if (value === null) return true;
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) || value < '1000-01-01') return false;
@@ -12,6 +12,35 @@ export function validTaskTime(value: unknown): value is string | null {
   const match = value.match(/^([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/);
   return !!match;
 }
+export function validTimeRange(start: unknown, end: unknown): boolean {
+  if (!start && !end) return true;
+  if (start && !validTaskTime(start)) return false;
+  if (end && !validTaskTime(end)) return false;
+  if (start && end) return String(start) <= String(end);
+  return true;
+}
+export function parseTodoRow<T extends { label: string; start_time?: string | null; end_time?: string | null }>(todo: T): T {
+  if (!todo) return todo;
+  if (todo.start_time) return todo;
+  if (!todo.label) return todo;
+  const match = todo.label.match(/\s*\[time:([0-9:]*)-([0-9:]*)\]$/);
+  if (match) {
+    return {
+      ...todo,
+      label: todo.label.replace(match[0], '').trim(),
+      start_time: match[1] || null,
+      end_time: match[2] || null
+    };
+  }
+  return todo;
+}
+export function encodeTimeMetadata(label: string, start?: unknown, end?: unknown): string {
+  const clean = label.replace(/\s*\[time:[^\]]*\]$/, '').trim();
+  const s = typeof start === 'string' && start.trim() ? start.trim() : '';
+  const e = typeof end === 'string' && end.trim() ? end.trim() : '';
+  if (!s && !e) return clean;
+  return `${clean} [time:${s}-${e}]`;
+}
 export function localDate(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
@@ -23,7 +52,7 @@ export function addDays(value: string, days: number) {
 export function visibleTasks(tasks: Task[], view: TaskView, today: string, start: string, completed: boolean, priority: string, search: string, sort: string, end?: string) {
   const ranks = { HIGH: 0, MEDIUM: 1, LOW: 2 };
   return tasks.filter(task => (completed || !task.done) && (priority === 'all' || task.priority === priority) && task.label.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()) &&
-    (view === 'inbox' || (view === 'today' ? !!task.due_date && task.due_date <= today : !!task.due_date && task.due_date >= start && task.due_date <= (end || addDays(start, 6)))))
+    (view === 'inbox' || view === 'timeline' || (view === 'today' ? !!task.due_date && task.due_date <= today : !!task.due_date && task.due_date >= start && task.due_date <= (end || addDays(start, 6)))))
     .sort((a, b) => Number(a.done) - Number(b.done) || (sort === 'priority' ? ranks[a.priority] - ranks[b.priority] : sort === 'title' ? a.label.localeCompare(b.label) : sort === 'date' ? (a.due_date || '9999').localeCompare(b.due_date || '9999') || (a.due_time || '99:99').localeCompare(b.due_time || '99:99') : (a.due_time || '99:99').localeCompare(b.due_time || '99:99')));
 }
 

@@ -10,6 +10,8 @@ export type DuckiesTask = {
   priority?: 'LOW' | 'MEDIUM' | 'HIGH';
   due_date?: string | null;
   due_time?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
 };
 
 // Feeds Duckies with real Todoist tasks (list_kind='task').
@@ -59,9 +61,9 @@ export function useTodoistTasks(lang: Lang) {
   return {
     tasks, loading, busy, error,
     // due_date/due_time are only sent when set: the API rejects them before migration 012 is applied.
-    onAdd: (label: string, extra: { priority?: DuckiesTask['priority']; due_date?: string; due_time?: string } = {}) =>
-      save('POST', undefined, { label, list_kind: 'task', priority: extra.priority || 'MEDIUM', ...(extra.due_date ? { due_date: extra.due_date } : {}), ...(extra.due_date && extra.due_time ? { due_time: extra.due_time } : {}) }),
-    onUpdate: (id: string, patch: { label?: string; priority?: DuckiesTask['priority']; due_date?: string | null; due_time?: string | null }) => save('PUT', id, patch),
+    onAdd: (label: string, extra: { priority?: DuckiesTask['priority']; due_date?: string; due_time?: string; start_time?: string; end_time?: string } = {}) =>
+      save('POST', undefined, { label, list_kind: 'task', priority: extra.priority || 'MEDIUM', ...(extra.due_date ? { due_date: extra.due_date } : {}), ...(extra.due_date && extra.due_time ? { due_time: extra.due_time } : {}), ...(extra.start_time ? { start_time: extra.start_time } : {}), ...(extra.end_time ? { end_time: extra.end_time } : {}) }),
+    onUpdate: (id: string, patch: { label?: string; priority?: DuckiesTask['priority']; due_date?: string | null; due_time?: string | null; start_time?: string | null; end_time?: string | null }) => save('PUT', id, patch),
     onToggle: (id: string, done: boolean) => save('PUT', id, { done }),
     onDelete: (id: string) => save('DELETE', id),
   };

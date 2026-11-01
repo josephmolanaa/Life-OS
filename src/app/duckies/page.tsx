@@ -1,20 +1,50 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { CheckSquare, Clock, Droplets, Cat, FolderDown, Pause, Play, RotateCcw, Minus, Plus, Bell, BellOff, Volume2, VolumeX, X, FileText, Pencil, CalendarDays, Clock3, Flag } from 'lucide-react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { CheckSquare, Clock, Droplets, Cat, FolderDown, Pause, Play, RotateCcw, Minus, Plus, Bell, BellOff, Volume2, Volume1, VolumeX, X, FileText, Pencil, CalendarDays, Clock3, Flag, Music, SkipBack, SkipForward, ChevronLeft, ChevronRight, MessageSquare, Zap } from 'lucide-react';
 import { useTodoistTasks } from '@/components/use-todoist-tasks';
 import { duckiesDisplayKey, formatCountdown, readDuckiesDisplay, type DuckiesDisplay } from '@/lib/duckies-display';
 import { getLang, type Lang } from '@/lib/i18n';
 import { PixelDuck, duckScenes, type DuckScene } from '@/components/pixel-duck';
 
-type Tab = 'tasks' | 'timer' | 'water' | 'pet' | 'shelf';
+type Tab = 'tasks' | 'timer' | 'water' | 'media' | 'pet' | 'shelf';
+type VolumeState = { level: number; muted: boolean };
+type MediaState = { status: string; title: string; artist: string; album: string; position: number; duration: number; thumbnail?: string; sourceAppId?: string };
 type Settings = { enabled: boolean; notifications: boolean; sound: boolean };
 type Toast = { id: number; title: string; body: string; tone: 'green' | 'blue' | 'amber' | 'discord'; image?: string };
 type Priority = 'LOW' | 'MEDIUM' | 'HIGH';
-type TaskMeta = { priority: Priority; due_date: string; due_time: string };
-const emptyMeta: TaskMeta = { priority: 'MEDIUM', due_date: '', due_time: '' };
+type TaskMeta = { priority: Priority; due_date: string; due_time: string; start_time: string; end_time: string };
+const emptyMeta: TaskMeta = { priority: 'MEDIUM', due_date: '', due_time: '', start_time: '', end_time: '' };
 const nextPriority: Record<Priority, Priority> = { MEDIUM: 'HIGH', HIGH: 'LOW', LOW: 'MEDIUM' };
 type ShelfItem = { id: number; name: string; detail: string; url?: string; text?: string };
+type LyricLine = { time: number; text: string };
+
+function parseLrc(lrcText: string): LyricLine[] {
+  const lines: LyricLine[] = [];
+  const regex = /\[(\d{2}):(\d{2})(?:\.(\d{2,3}))?\](.*)/;
+  for (const raw of lrcText.split(/\r?\n/)) {
+    const match = raw.match(regex);
+    if (match) {
+      const min = parseInt(match[1], 10);
+      const sec = parseInt(match[2], 10);
+      const frac = match[3] ? (match[3].length === 2 ? parseInt(match[3], 10) / 100 : parseInt(match[3], 10) / 1000) : 0;
+      const text = match[4].trim();
+      if (text) lines.push({ time: min * 60 + sec + frac, text });
+    }
+  }
+  return lines.sort((a, b) => a.time - b.time);
+}
+
+function cleanMediaTitle(raw: string): string {
+  let s = raw.trim();
+  const m = s.match(/^find\s+['"]?([^'"]+?)['"]?\s+on\s+/i);
+  if (m) s = m[1];
+  s = s.replace(/\s*\|.*$/, '');
+  s = s.replace(/\s*-\s*YouTube$/i, '');
+  s = s.replace(/\s*[\(\[](feat\.|ft\.|remaster(ed)?|official|audio|video|lyrics?|bonus|deluxe|version|\d+\/\d+\s*transition).*?[\)\]]/gi, '');
+  s = s.replace(/\s*-\s*(feat\.|ft\.|remaster(ed)?|single|deluxe|bonus|version).*$/gi, '');
+  return s.trim();
+}
 
 const focusPresets = [15, 25, 45, 60];
 const waterAmounts = [
@@ -84,6 +114,20 @@ export default function DuckiesPage() {
   const [pet, setPet] = useState<DuckScene>('idle');
   const [shelf, setShelf] = useState<ShelfItem[]>([]);
   const [settings, setSettings] = useState<Settings>({ enabled: true, notifications: false, sound: false });
+  const [volume, setVolumeState] = useState<VolumeState>({ level: 50, muted: false });
+  const [volumeHud, setVolumeHud] = useState(false);
+  const volumeTimer = useRef<number | undefined>(undefined);
+  const [media, setMedia] = useState<MediaState | null>(null);
+  const [mediaPos, setMediaPos] = useState(0);
+  const [albumArtUrl, setAlbumArtUrl] = useState<string>('');
+  const currentThumbnail = albumArtUrl || media?.thumbnail || '';
+  const [showLyrics, setShowLyrics] = useState(false);
+  const [lyricsLines, setLyricsLines] = useState<LyricLine[]>([]);
+  const [plainLyrics, setPlainLyrics] = useState<string[]>([]);
+  const [lyricsLoading, setLyricsLoading] = useState(false);
+  const [lyricsError, setLyricsError] = useState<string | null>(null);
+  const activeLyricRef = useRef<HTMLDivElement | null>(null);
+  const lyricsContainerRef = useRef<HTMLDivElement | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   const [dnd, setDnd] = useState(false);
   const [addDraft, setAddDraft] = useState('');
@@ -96,7 +140,22 @@ export default function DuckiesPage() {
   const toastTimer = useRef<number | undefined>(undefined);
   const todoist = useTodoistTasks(lang);
   const id = lang === 'id';
-  const openTasks = todoist.tasks.filter(item => !item.done);
+  const openTasks = useMemo(() => {
+    const ranks: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 };
+    return todoist.tasks
+      .filter(item => !item.done)
+      .sort((a, b) => {
+        const timeA = a.start_time || a.due_time || '99:99';
+        const timeB = b.start_time || b.due_time || '99:99';
+        const keyA = `${a.due_date || '9999-99-99'} ${timeA}`;
+        const keyB = `${b.due_date || '9999-99-99'} ${timeB}`;
+        const cmp = keyA.localeCompare(keyB);
+        if (cmp !== 0) return cmp;
+        const rankA = ranks[a.priority || 'MEDIUM'] ?? 1;
+        const rankB = ranks[b.priority || 'MEDIUM'] ?? 1;
+        return rankA - rankB;
+      });
+  }, [todoist.tasks]);
 
   useEffect(() => {
     getLang().then(setLang);
@@ -123,8 +182,181 @@ export default function DuckiesPage() {
     window.addEventListener('storage', onStorage);
     const clockTimer = window.setInterval(() => setNow(new Date()), 5000);
     const offSettings = window.lifeOsDuckies?.onSettings?.(setSettings);
-    return () => { window.clearInterval(clockTimer); window.removeEventListener('storage', onStorage); offSettings?.(); };
+
+    // Initial audio & media state from main
+    window.lifeOsDuckies?.getAudioMedia?.().then(state => {
+      if (state?.volume) setVolumeState(state.volume);
+      if (state?.media) {
+        setMedia(state.media);
+        setMediaPos(state.media.position || 0);
+      }
+    }).catch(() => {});
+
+    // Listen for volume events (auto-trigger HUD for 1.5s)
+    const offVol = window.lifeOsDuckies?.onVolumeChange?.(incoming => {
+      setVolumeState({ level: incoming.level, muted: incoming.muted });
+      if (!incoming.initial) {
+        setVolumeHud(true);
+        window.clearTimeout(volumeTimer.current);
+        volumeTimer.current = window.setTimeout(() => setVolumeHud(false), 1500);
+      }
+    });
+
+    // Listen for media changes from Windows GSMTC
+    const offMedia = window.lifeOsDuckies?.onMediaChange?.(incoming => {
+      setMedia(incoming);
+      if (typeof incoming?.position === 'number') setMediaPos(incoming.position);
+    });
+
+    return () => {
+      window.clearInterval(clockTimer);
+      window.removeEventListener('storage', onStorage);
+      offSettings?.();
+      offVol?.();
+      offMedia?.();
+    };
   }, []);
+
+  // Smooth playback clock: anchor on each reported position, then advance by real elapsed time.
+  useEffect(() => {
+    if (media?.status !== 'Playing' || !media.duration) return;
+    const start = performance.now(), base = media.position || 0, end = media.duration;
+    const ticker = window.setInterval(() => setMediaPos(Math.min(end, base + (performance.now() - start) / 1000)), 250);
+    return () => window.clearInterval(ticker);
+  }, [media?.status, media?.duration, media?.position]);
+
+  // Fetch high-res artwork from iTunes and synced lyrics from LRCLIB
+  useEffect(() => {
+    if (!media?.title) {
+      setLyricsLines([]);
+      setPlainLyrics([]);
+      setLyricsError(null);
+      setAlbumArtUrl('');
+      return;
+    }
+    let cancelled = false;
+    const fetchMediaAssets = async () => {
+      setLyricsLoading(true);
+      setLyricsError(null);
+      setAlbumArtUrl('');
+      const cleanArtist = media.artist?.trim() || '';
+      const rawTitle = media.title.trim();
+      const clean1 = cleanMediaTitle(rawTitle);
+      const clean2 = rawTitle.replace(/[\(\[].*?[\)\]]/g, '').trim();
+      const cleanParts = clean1.split(/[\/\\]/).map(s => s.trim()).filter(Boolean);
+      const cleanXParts = (clean1.includes(' x ') || clean1.includes(' X '))
+        ? clean1.split(/\s+[xX]\s+/).map(s => s.trim()).filter(Boolean)
+        : [];
+      const queries = Array.from(new Set([
+        clean1,
+        ...cleanParts,
+        ...cleanXParts,
+        clean2,
+        rawTitle,
+      ])).filter(Boolean);
+
+      // 1. Fetch clean high-resolution artwork from iTunes (600x600, no Spotify watermark)
+      (async () => {
+        for (const q of queries) {
+          try {
+            const itunesRes = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(`${q} ${cleanArtist}`.trim())}&entity=song&limit=1`);
+            if (itunesRes.ok) {
+              const itunesJson = await itunesRes.json();
+              const art = itunesJson.results?.[0]?.artworkUrl100;
+              if (art) {
+                if (!cancelled) setAlbumArtUrl(art.replace('100x100bb.jpg', '600x600bb.jpg'));
+                break;
+              }
+            }
+          } catch {}
+        }
+      })();
+
+      // 2. Fetch Synced Lyrics from LRCLIB (pass duration so the synced track matches exactly)
+      try {
+        let foundData: { syncedLyrics?: string; plainLyrics?: string } | null = null;
+        const targetDur = media.duration && media.duration > 0 ? Math.round(media.duration) : 0;
+        for (const q of queries) {
+          try {
+            const durParam = targetDur > 0 ? `&duration=${targetDur}` : '';
+            const getRes = await fetch(`https://lrclib.net/api/get?track_name=${encodeURIComponent(q)}&artist_name=${encodeURIComponent(cleanArtist)}${durParam}`);
+            if (getRes.ok) {
+              const data = await getRes.json();
+              if (data?.syncedLyrics || data?.plainLyrics) {
+                foundData = data;
+                break;
+              }
+            }
+            const searchRes = await fetch(`https://lrclib.net/api/search?q=${encodeURIComponent(`${q} ${cleanArtist}`.trim())}`);
+            if (searchRes.ok) {
+              const list = await searchRes.json();
+              if (Array.isArray(list) && list.length > 0) {
+                // Pick synced lyrics with closest duration to the playing track
+                const synced = list.filter((item: { syncedLyrics?: string }) => !!item.syncedLyrics);
+                if (synced.length > 0 && targetDur > 0) {
+                  synced.sort((a: { duration?: number }, b: { duration?: number }) => Math.abs((a.duration || 0) - targetDur) - Math.abs((b.duration || 0) - targetDur));
+                  foundData = synced[0];
+                  break;
+                } else if (synced.length > 0) {
+                  foundData = synced[0];
+                  break;
+                } else if (list[0]?.plainLyrics) {
+                  foundData = list[0];
+                  break;
+                }
+              }
+            }
+          } catch {}
+        }
+
+        if (cancelled) return;
+        if (foundData?.syncedLyrics) {
+          setLyricsLines(parseLrc(foundData.syncedLyrics));
+          setPlainLyrics([]);
+          setLyricsError(null);
+        } else if (foundData?.plainLyrics) {
+          setLyricsLines([]);
+          setPlainLyrics(foundData.plainLyrics.split(/\r?\n/).filter((l: string) => l.trim().length > 0));
+          setLyricsError(null);
+        } else {
+          setLyricsLines([]);
+          setPlainLyrics([]);
+          setLyricsError(id ? 'Lirik tidak ditemukan' : 'No lyrics available');
+        }
+      } catch {
+        if (!cancelled) {
+          setLyricsLines([]);
+          setPlainLyrics([]);
+          setLyricsError(id ? 'Gagal memuat lirik' : 'Failed to load lyrics');
+        }
+      } finally {
+        if (!cancelled) setLyricsLoading(false);
+      }
+    };
+
+    void fetchMediaAssets();
+    return () => { cancelled = true; };
+  }, [media?.title, media?.artist, id]);
+
+  const currentPos = mediaPos || media?.position || 0;
+  const activeLyricIndex = useMemo(() => {
+    if (!lyricsLines.length) return -1;
+    let idx = -1;
+    for (let i = 0; i < lyricsLines.length; i++) {
+      if (lyricsLines[i].time <= currentPos + 0.25) {
+        idx = i;
+      } else {
+        break;
+      }
+    }
+    return idx;
+  }, [lyricsLines, currentPos]);
+
+  useEffect(() => {
+    const line = activeLyricRef.current, box = lyricsContainerRef.current;
+    // Scroll only the lyrics box; scrollIntoView also scrolled main.island, shoving the compact pill off-screen.
+    if (showLyrics && line && box) box.scrollTo({ top: line.offsetTop - box.offsetTop - (box.clientHeight - line.offsetHeight) / 2, behavior: 'smooth' });
+  }, [activeLyricIndex, showLyrics]);
   const toggleDnd = () => setDnd(value => { localStorage.setItem('lifeos-duckies-dnd', value ? '0' : '1'); return !value; });
   useEffect(() => { localStorage.setItem('lifeos-duckies-state', JSON.stringify({ seconds, water, day: new Date().toDateString() })); }, [seconds, water]);
 
@@ -157,9 +389,10 @@ export default function DuckiesPage() {
     return () => window.clearInterval(timer);
   }, [reminderMinutes, water, waterGoal, notify, id]);
 
-  const mode = expanded ? 'expanded' : toast ? 'toast' : 'compact';
+  const mode = expanded ? 'expanded' : volumeHud ? 'volume' : toast ? 'toast' : 'compact';
   const focusSeconds = focusMinutes * 60;
   const timerActive = running || seconds < focusSeconds;
+  const mediaPlaying = Boolean(media?.status === 'Playing' && media?.title);
   const setFocus = (minutes: number) => {
     const next = Math.min(180, Math.max(1, minutes));
     localStorage.setItem('lifeos-duckies-focus', String(next));
@@ -192,17 +425,21 @@ export default function DuckiesPage() {
     return true;
   };
 
-  // All three layers stay mounted and crossfade; only the black pill's size springs. Each layer is
+  // All layers stay mounted and crossfade; only the black pill's size springs. Each layer is
   // measured continuously so the pill always knows the size of what it is about to show.
   const compactRef = useRef<HTMLElement | null>(null);
   const toastRef = useRef<HTMLDivElement | null>(null);
   const lastToast = useRef<Toast | null>(null);
   if (toast) lastToast.current = toast;
+  const activeLyricText = activeLyricIndex >= 0 && lyricsLines[activeLyricIndex] ? lyricsLines[activeLyricIndex].text : '';
+  const compactDisplayTitle = showLyrics
+    ? (activeLyricText || (lyricsLoading ? (id ? 'Memuat lirik...' : 'Loading lyrics...') : (media?.title || (id ? 'Musik' : 'Music'))))
+    : (media?.title || (id ? 'Musik' : 'Music'));
   const [compactSize, setCompactSize] = useState<[number, number]>([160, 36]);
   const [toastSize, setToastSize] = useState<[number, number]>([300, 64]);
-  const compactKind = timerActive ? 'live' : 'idle';
+  const compactKind = timerActive ? 'live' : ((tab === 'media' || showLyrics) && (mediaPlaying || (showLyrics && !!media?.title)) ? 'media' : 'idle');
   const center = display.mode === 'clock' ? now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : formatCountdown(new Date(display.target), now);
-  // Re-bind on compactKind: idle and split/live are different nodes, so a stale observer would read a detached node as 0x0.
+  // Re-bind on compactKind / lyric update: idle and split/live are different nodes, and lyrics dynamic width updates pill shape smoothly.
   useLayoutEffect(() => {
     const watch = (node: HTMLElement | null, set: (size: [number, number]) => void) => {
       if (!node) return undefined;
@@ -214,8 +451,14 @@ export default function DuckiesPage() {
     };
     const observers = [watch(compactRef.current, setCompactSize), watch(toastRef.current, setToastSize)];
     return () => observers.forEach(observer => observer?.disconnect());
-  }, [compactKind]);
-  const [width, height] = mode === 'expanded' ? [560, 230] : mode === 'toast' ? toastSize : compactSize;
+  }, [compactKind, compactDisplayTitle, mode]);
+  const [width, height] = mode === 'expanded'
+    ? [560, 230]
+    : mode === 'volume'
+    ? [230, 36]
+    : mode === 'toast'
+    ? toastSize
+    : compactSize;
   // The OS window never resizes (that is what blinked); it is clipped to the pill instead. Grow the clip
   // before the spring opens, shrink it after the spring settles, with room for the soft shadow.
   const islandRef = useRef<HTMLElement | null>(null);
@@ -242,6 +485,7 @@ export default function DuckiesPage() {
 
   const format = (value: number) => `${Math.floor(value / 60).toString().padStart(2, '0')}:${(value % 60).toString().padStart(2, '0')}`;
   const progress = 1 - seconds / focusSeconds;
+
   const addWater = (amount: number) => setWater(value => {
     const next = Math.min(10000, value + amount);
     if (value < waterGoal && next >= waterGoal) notify({ title: id ? 'Target air tercapai' : 'Water goal reached', body: `${next} / ${waterGoal} ml`, tone: 'blue' });
@@ -258,22 +502,70 @@ export default function DuckiesPage() {
   };
   const priorityLabel = (value: Priority) => ({ HIGH: id ? 'Tinggi' : 'High', MEDIUM: id ? 'Sedang' : 'Medium', LOW: id ? 'Rendah' : 'Low' })[value];
   const shortDate = (value: string) => new Date(`${value}T12:00:00`).toLocaleDateString(id ? 'id-ID' : 'en-US', { day: 'numeric', month: 'short' });
+  const formatMediaTime = (sec: number) => {
+    if (!sec || isNaN(sec) || sec < 0) return '00:00';
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+  const formatRemainingTime = (pos: number, dur: number) => {
+    if (!dur || dur <= 0) return '-00:00';
+    const rem = Math.max(0, dur - pos);
+    return `-${formatMediaTime(rem)}`;
+  };
+  const handleMediaControl = (action: 'playPause' | 'next' | 'previous') => {
+    window.lifeOsDuckies?.mediaControl?.(action);
+  };
   const tabs: [Tab, string, typeof CheckSquare][] = [
-    ['tasks', 'Todoist', CheckSquare], ['timer', id ? 'Fokus' : 'Focus', Clock], ['water', id ? 'Air' : 'Water', Droplets], ['pet', 'Pet', Cat], ['shelf', 'Shelf', FolderDown],
+    ['tasks', 'Todoist', CheckSquare], ['timer', id ? 'Fokus' : 'Focus', Clock], ['water', id ? 'Air' : 'Water', Droplets], ['media', id ? 'Musik' : 'Music', Music], ['pet', 'Pet', Cat], ['shelf', 'Shelf', FolderDown],
   ];
 
   return <main ref={islandRef} className={`island ${mode}`} style={{ width, height }} onMouseEnter={hoverIn} onMouseLeave={hoverOut}>
+    {/* Volume OSD HUD (Image 61) */}
+    <div className={`islandLayer islandVolume ${mode === 'volume' ? 'on' : ''}`} aria-hidden={mode !== 'volume'}>
+      <button
+        type="button"
+        className="islandVolumeIcon"
+        onClick={() => window.lifeOsDuckies?.setVolume?.(volume.muted ? volume.level : 0)}
+        aria-label={volume.muted ? 'Unmute' : 'Mute'}
+      >
+        {volume.muted || volume.level === 0 ? <VolumeX size={16} aria-hidden="true" /> : volume.level < 50 ? <Volume1 size={16} aria-hidden="true" /> : <Volume2 size={16} aria-hidden="true" />}
+      </button>
+      <div
+        className="islandVolumeTrack"
+        role="slider"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={volume.muted ? 0 : volume.level}
+        onClick={e => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          const pct = Math.max(0, Math.min(100, Math.round(((e.clientX - rect.left) / rect.width) * 100)));
+          window.lifeOsDuckies?.setVolume?.(pct);
+        }}
+      >
+        <div className="islandVolumeFill" style={{ width: `${volume.muted ? 0 : volume.level}%` }} />
+      </div>
+    </div>
+
     {compactKind === 'idle' && <div ref={node => { compactRef.current = node; }} className={`islandLayer islandCompact idle ${mode === 'compact' ? 'on' : ''}`} aria-hidden={mode !== 'compact'}>
       <button type="button" className="islandExpand" onClick={() => setExpanded(true)} aria-label={id ? 'Buka Duckies' : 'Open Duckies'}><PixelDuck scene={pet} /><span className={`islandTime ${display.mode === 'countdown' ? 'red' : ''}`}>{center}</span></button>
       {bell}
     </div>}
-    {compactKind !== 'idle' && <button ref={node => { compactRef.current = node; }} type="button" className={`islandLayer islandCompact ${compactKind} ${mode === 'compact' ? 'on' : ''}`} aria-hidden={mode !== 'compact'} tabIndex={mode === 'compact' ? 0 : -1} onClick={() => setExpanded(true)} aria-label={id ? 'Buka Duckies' : 'Open Duckies'}>
-      {timerActive ? <>
-        <PixelDuck scene={running ? 'focus' : pet} />
-        <span className={`islandRing ${running ? 'live' : ''}`} style={{ ['--p' as string]: progress }} aria-hidden="true" />
-        <span className="islandGap" aria-hidden="true" />
-        <span className="islandTime green">{format(seconds)}</span>
-      </> : null}
+    {compactKind === 'live' && <button ref={node => { compactRef.current = node; }} type="button" className={`islandLayer islandCompact live ${mode === 'compact' ? 'on' : ''}`} aria-hidden={mode !== 'compact'} tabIndex={mode === 'compact' ? 0 : -1} onClick={() => setExpanded(true)} aria-label={id ? 'Buka Duckies' : 'Open Duckies'}>
+      <PixelDuck scene={running ? 'focus' : pet} />
+      <span className="islandTime green">{format(seconds)}</span>
+      <span className={`islandRing ${running ? 'live' : ''}`} style={{ ['--p' as string]: progress }} aria-hidden="true" />
+    </button>}
+    {compactKind === 'media' && <button ref={node => { compactRef.current = node; }} type="button" className={`islandLayer islandCompact mediaPlay ${showLyrics ? 'lyricsMode' : ''} ${mode === 'compact' ? 'on' : ''}`} aria-hidden={mode !== 'compact'} tabIndex={mode === 'compact' ? 0 : -1} onClick={() => { setTab('media'); setExpanded(true); }} aria-label={id ? 'Buka pemutar musik' : 'Open media player'}>
+      <span className="islandCompactMediaThumb">
+        {currentThumbnail ? <img src={currentThumbnail} alt="" /> : <PixelDuck scene="music" size={16} />}
+      </span>
+      <span className="islandCompactMediaTitle">
+        <span>{compactDisplayTitle}</span>
+      </span>
+      <span className="islandWaveform mini playing" aria-hidden="true">
+        <span /><span /><span />
+      </span>
     </button>}
 
     <div ref={toastRef} className={`islandLayer islandToast ${lastToast.current?.tone ?? 'green'} ${mode === 'toast' ? 'on' : ''}`} role="status" aria-live="polite">
@@ -282,6 +574,13 @@ export default function DuckiesPage() {
     </div>
 
     <section className={`islandLayer islandPanel ${mode === 'expanded' ? 'on' : ''}`} aria-label="Duckies" aria-hidden={mode !== 'expanded'}>
+      {tab === 'media' && currentThumbnail && (
+        <div
+          className="islandMediaBackdrop"
+          style={{ backgroundImage: `url(${currentThumbnail})` }}
+          aria-hidden="true"
+        />
+      )}
       <header>
         <strong className="islandBrand"><PixelDuck scene={pet} size={28} />Duckies</strong>
         <nav aria-label={id ? 'Tab Duckies' : 'Duckies tabs'}>{tabs.map(([value, label, Icon]) => <button key={value} type="button" title={label} aria-label={label} aria-pressed={tab === value} className={tab === value ? 'active' : ''} onClick={() => setTab(value)}><Icon size={14} aria-hidden="true" /></button>)}</nav>
@@ -306,7 +605,9 @@ export default function DuckiesPage() {
                     <button type="button" className={`macChip flag ${editing.priority.toLowerCase()}`} onClick={() => setEditing({ ...editing, priority: nextPriority[editing.priority] })} aria-label={id ? 'Ganti prioritas' : 'Change priority'}><Flag size={11} aria-hidden="true" />{priorityLabel(editing.priority)}</button>
                     <label className={`macChip ${editing.due_date ? 'set' : ''}`}><CalendarDays size={11} aria-hidden="true" />{editing.due_date ? shortDate(editing.due_date) : (id ? 'Tanggal' : 'Date')}<input type="date" value={editing.due_date} onChange={e => setEditing({ ...editing, due_date: e.target.value, due_time: e.target.value ? editing.due_time : '' })} aria-label={id ? 'Tanggal jatuh tempo' : 'Due date'} /></label>
                     <label className={`macChip ${editing.due_time ? 'set' : ''} ${editing.due_date ? '' : 'off'}`}><Clock3 size={11} aria-hidden="true" />{editing.due_time || (id ? 'Jam' : 'Time')}<input type="time" value={editing.due_time} disabled={!editing.due_date} onChange={e => setEditing({ ...editing, due_time: e.target.value })} aria-label={id ? 'Waktu' : 'Time'} /></label>
-                    {editing.due_date && <button type="button" className="macChip clear" onClick={() => setEditing({ ...editing, due_date: '', due_time: '' })} aria-label={id ? 'Hapus tanggal' : 'Clear date'}><X size={11} aria-hidden="true" /></button>}
+                  <label className={`macChip ${editing.start_time ? 'set' : ''} ${editing.due_date ? '' : 'off'}`}><Clock3 size={11} aria-hidden="true" />{editing.start_time || (id ? 'Mulai' : 'Start')}<input type="time" value={editing.start_time} disabled={!editing.due_date} onChange={e => setEditing({ ...editing, start_time: e.target.value })} aria-label={id ? 'Jam mulai' : 'Start time'} /></label>
+                  <label className={`macChip ${editing.end_time ? 'set' : ''} ${editing.start_time ? '' : 'off'}`}><Clock3 size={11} aria-hidden="true" />{editing.end_time || (id ? 'Selesai' : 'End')}<input type="time" value={editing.end_time} disabled={!editing.start_time} onChange={e => setEditing({ ...editing, end_time: e.target.value })} aria-label={id ? 'Jam selesai' : 'End time'} /></label>
+                    {editing.due_date && <button type="button" className="macChip clear" onClick={() => setEditing({ ...editing, due_date: '', due_time: '', start_time: '', end_time: '' })} aria-label={id ? 'Hapus tanggal' : 'Clear date'}><X size={11} aria-hidden="true" /></button>}
                     <span className="macEditSpacer" />
                     <button type="button" className="macEditCancel" onClick={() => setEditing(null)}>{id ? 'Batal' : 'Cancel'}</button>
                     <button type="submit" className="macRemindersEditDone" disabled={todoist.busy || !editing.label.trim()}>{id ? 'Simpan' : 'Save'}</button>
@@ -317,10 +618,10 @@ export default function DuckiesPage() {
                   <span className="macRemindersText"><span>{item.label}</span></span>
                   <div className="macRemindersMeta">
                     <span className={`macPriority ${(item.priority || 'MEDIUM').toLowerCase()}`} aria-label={id ? 'Prioritas' : 'Priority'} />
-                    {item.due_date && <span>{new Date(`${item.due_date}T12:00:00`).toLocaleDateString(id ? 'id-ID' : 'en-US', { day: 'numeric', month: 'short' })}{item.due_time ? ` · ${item.due_time.slice(0, 5)}` : ''}</span>}
+                    {item.due_date && <span>{new Date(`${item.due_date}T12:00:00`).toLocaleDateString(id ? 'id-ID' : 'en-US', { day: 'numeric', month: 'short' })}{(item.start_time || item.due_time) ? ` · ${(item.start_time && item.end_time ? `${item.start_time.slice(0, 5)}–${item.end_time.slice(0, 5)}` : (item.start_time || item.due_time)?.slice(0, 5))}` : ''}</span>}
                   </div>
                   <div className="macRemindersActions">
-                    <button type="button" onClick={() => setEditing({ id: item.id, label: item.label, priority: item.priority || 'MEDIUM', due_date: item.due_date || '', due_time: (item.due_time || '').slice(0, 5) })} aria-label={id ? 'Ubah' : 'Edit'}><Pencil size={12} aria-hidden="true" /></button>
+                    <button type="button" onClick={() => setEditing({ id: item.id, label: item.label, priority: item.priority || 'MEDIUM', due_date: item.due_date || '', due_time: (item.due_time || '').slice(0, 5), start_time: item.start_time || '', end_time: item.end_time || '' })} aria-label={id ? 'Ubah' : 'Edit'}><Pencil size={12} aria-hidden="true" /></button>
                     <button type="button" className="macRemindersDelete" disabled={todoist.busy} onClick={() => void todoist.onDelete(item.id)} aria-label={`${id ? 'Hapus' : 'Delete'} ${item.label}`}><X size={12} aria-hidden="true" /></button>
                   </div>
                 </>
@@ -341,7 +642,9 @@ export default function DuckiesPage() {
               <button type="button" className={`macChip flag ${newMeta.priority.toLowerCase()}`} onClick={() => setNewMeta({ ...newMeta, priority: nextPriority[newMeta.priority] })} aria-label={id ? 'Ganti prioritas' : 'Change priority'}><Flag size={11} aria-hidden="true" />{priorityLabel(newMeta.priority)}</button>
               <label className={`macChip ${newMeta.due_date ? 'set' : ''}`}><CalendarDays size={11} aria-hidden="true" />{newMeta.due_date ? shortDate(newMeta.due_date) : (id ? 'Tanggal' : 'Date')}<input type="date" value={newMeta.due_date} onChange={e => setNewMeta({ ...newMeta, due_date: e.target.value, due_time: e.target.value ? newMeta.due_time : '' })} aria-label={id ? 'Tanggal jatuh tempo' : 'Due date'} /></label>
               <label className={`macChip ${newMeta.due_time ? 'set' : ''} ${newMeta.due_date ? '' : 'off'}`}><Clock3 size={11} aria-hidden="true" />{newMeta.due_time || (id ? 'Jam' : 'Time')}<input type="time" value={newMeta.due_time} disabled={!newMeta.due_date} onChange={e => setNewMeta({ ...newMeta, due_time: e.target.value })} aria-label={id ? 'Waktu' : 'Time'} /></label>
-              {(newMeta.due_date || newMeta.priority !== 'MEDIUM') && <button type="button" className="macChip clear" onClick={() => setNewMeta(emptyMeta)} aria-label={id ? 'Hapus detail' : 'Clear details'}><X size={11} aria-hidden="true" /></button>}
+              <label className={`macChip ${newMeta.start_time ? 'set' : ''} ${newMeta.due_date ? '' : 'off'}`}><Clock3 size={11} aria-hidden="true" />{newMeta.start_time || (id ? 'Mulai' : 'Start')}<input type="time" value={newMeta.start_time} disabled={!newMeta.due_date} onChange={e => setNewMeta({ ...newMeta, start_time: e.target.value })} aria-label={id ? 'Jam mulai' : 'Start time'} /></label>
+              <label className={`macChip ${newMeta.end_time ? 'set' : ''} ${newMeta.start_time ? '' : 'off'}`}><Clock3 size={11} aria-hidden="true" />{newMeta.end_time || (id ? 'Selesai' : 'End')}<input type="time" value={newMeta.end_time} disabled={!newMeta.start_time} onChange={e => setNewMeta({ ...newMeta, end_time: e.target.value })} aria-label={id ? 'Jam selesai' : 'End time'} /></label>
+              {(newMeta.due_date || newMeta.priority !== 'MEDIUM' || newMeta.start_time || newMeta.end_time) && <button type="button" className="macChip clear" onClick={() => setNewMeta(emptyMeta)} aria-label={id ? 'Hapus detail' : 'Clear details'}><X size={11} aria-hidden="true" /></button>}
               <span className="macEditSpacer" />
               <button type="button" className="macEditCancel" onClick={() => { setAdding(false); setAddDraft(''); setNewMeta(emptyMeta); }}>{id ? 'Batal' : 'Cancel'}</button>
               <button type="submit" className="macRemindersEditDone macAddSubmit" disabled={todoist.busy || !addDraft.trim()}>{id ? 'Tambah' : 'Add'}</button>
@@ -375,6 +678,200 @@ export default function DuckiesPage() {
             <div className="islandChipRow"><span>{id ? 'Ingatkan' : 'Remind'}</span>{reminderPresets.map(minutes => <button key={minutes} type="button" className={reminderMinutes === minutes ? 'active' : ''} onClick={() => chooseReminder(minutes)}>{minutes ? `${minutes}m` : (id ? 'Mati' : 'Off')}</button>)}</div>
           </div>
         </div>}
+        {tab === 'media' && !showLyrics && (
+          <div className="islandMediaCard">
+            <div className="islandMediaArtWrap">
+              {currentThumbnail ? (
+                <img src={currentThumbnail} alt={media?.album || media?.title || 'Album Art'} className="islandMediaArt" />
+              ) : (
+                <div className="islandMediaArtPlaceholder">
+                  <PixelDuck scene="music" size={48} />
+                </div>
+              )}
+            </div>
+            <div className="islandMediaContent">
+              <div className="islandMediaHeaderRow">
+                <span className={`islandWaveform ${mediaPlaying ? 'playing' : ''}`} aria-label={mediaPlaying ? 'Audio playing' : 'Audio paused'}>
+                  <span /><span /><span /><span />
+                </span>
+              </div>
+              <div className="islandMediaTrackInfo">
+                <strong className="islandMediaTitle" title={media?.title || (id ? 'Tidak ada musik diputar' : 'No music playing')}>
+                  {media?.title || (id ? 'Tidak ada musik' : 'No music playing')}
+                </strong>
+                <span className="islandMediaArtist" title={media?.artist || ''}>
+                  {media?.artist || (id ? 'Buka Spotify, YouTube, atau pemutar media lainnya' : 'Open Spotify, YouTube, or any media player')}
+                </span>
+              </div>
+              <div className="islandMediaProgressWrap">
+                <div className="islandMediaProgressBar">
+                  <div
+                    className="islandMediaProgressFill"
+                    style={{
+                      width: `${media?.duration && media.duration > 0 ? Math.min(100, Math.max(0, ((mediaPos || media?.position || 0) / media.duration) * 100)) : 0}%`,
+                    }}
+                  />
+                </div>
+                <div className="islandMediaTimes">
+                  <span>{formatMediaTime(mediaPos || media?.position || 0)}</span>
+                  <span>{formatRemainingTime(mediaPos || media?.position || 0, media?.duration || 0)}</span>
+                </div>
+              </div>
+              <div className="islandMediaControls">
+                <div className="islandMediaDots" aria-hidden="true">
+                  <span className="active" /><span /><span />
+                </div>
+                <div className="islandMediaButtons">
+                  <button
+                    type="button"
+                    className="islandMediaBtn"
+                    onClick={() => handleMediaControl('previous')}
+                    aria-label={id ? 'Lagu sebelumnya' : 'Previous track'}
+                    title={id ? 'Lagu sebelumnya' : 'Previous track'}
+                  >
+                    <SkipBack size={16} aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    className="islandMediaBtn playPause"
+                    onClick={() => handleMediaControl('playPause')}
+                    aria-label={mediaPlaying ? (id ? 'Jeda' : 'Pause') : (id ? 'Putar' : 'Play')}
+                    title={mediaPlaying ? (id ? 'Jeda' : 'Pause') : (id ? 'Putar' : 'Play')}
+                  >
+                    {mediaPlaying ? <Pause size={18} aria-hidden="true" /> : <Play size={18} aria-hidden="true" />}
+                  </button>
+                  <button
+                    type="button"
+                    className="islandMediaBtn"
+                    onClick={() => handleMediaControl('next')}
+                    aria-label={id ? 'Lagu berikutnya' : 'Next track'}
+                    title={id ? 'Lagu berikutnya' : 'Next track'}
+                  >
+                    <SkipForward size={16} aria-hidden="true" />
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="islandMediaLyricsBtn"
+                  onClick={() => setShowLyrics(true)}
+                  aria-label={id ? 'Buka lirik' : 'Open lyrics'}
+                  title={id ? 'Buka lirik' : 'Open lyrics'}
+                >
+                  <MessageSquare size={13} aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {tab === 'media' && showLyrics && (
+          <div className="islandMediaLyricsView">
+            <div className="islandLyricsSidebar">
+              <div className="islandLyricsSidebarTop">
+                <div className="islandLyricsThumbWrap">
+                  {currentThumbnail ? (
+                    <img src={currentThumbnail} alt="" className="islandMediaArt" />
+                  ) : (
+                    <div className="islandMediaArtPlaceholder">
+                      <PixelDuck scene="music" size={24} />
+                    </div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="islandLyricsBackBtn"
+                  onClick={() => setShowLyrics(false)}
+                  aria-label={id ? 'Tutup lirik' : 'Close lyrics'}
+                  title={id ? 'Tutup lirik' : 'Close lyrics'}
+                >
+                  <ChevronLeft size={13} aria-hidden="true" />
+                  <span>{id ? 'Tutup' : 'Close'}</span>
+                </button>
+              </div>
+              <div className="islandLyricsMeta">
+                <strong className="islandLyricsTitle" title={media?.title}>{media?.title || (id ? 'Musik' : 'Music')}</strong>
+                <span className="islandLyricsArtist" title={media?.artist}>{media?.artist || ''}</span>
+              </div>
+              <div className="islandLyricsProgressWrap">
+                <div className="islandMediaProgressBar mini">
+                  <div
+                    className="islandMediaProgressFill"
+                    style={{
+                      width: `${media?.duration && media.duration > 0 ? Math.min(100, Math.max(0, ((mediaPos || media?.position || 0) / media.duration) * 100)) : 0}%`,
+                    }}
+                  />
+                </div>
+                <div className="islandMediaTimes mini">
+                  <span>{formatMediaTime(mediaPos || media?.position || 0)}</span>
+                  <span>{formatRemainingTime(mediaPos || media?.position || 0, media?.duration || 0)}</span>
+                </div>
+              </div>
+              <div className="islandLyricsControls">
+                <button
+                  type="button"
+                  className="islandMediaBtn mini"
+                  onClick={() => handleMediaControl('previous')}
+                  aria-label={id ? 'Lagu sebelumnya' : 'Previous track'}
+                >
+                  <SkipBack size={14} aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className="islandMediaBtn mini playPause"
+                  onClick={() => handleMediaControl('playPause')}
+                  aria-label={mediaPlaying ? (id ? 'Jeda' : 'Pause') : (id ? 'Putar' : 'Play')}
+                >
+                  {mediaPlaying ? <Pause size={15} aria-hidden="true" /> : <Play size={15} aria-hidden="true" />}
+                </button>
+                <button
+                  type="button"
+                  className="islandMediaBtn mini"
+                  onClick={() => handleMediaControl('next')}
+                  aria-label={id ? 'Lagu berikutnya' : 'Next track'}
+                >
+                  <SkipForward size={14} aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+            <div className="islandLyricsScrollArea" ref={lyricsContainerRef}>
+              {lyricsLoading && (
+                <div className="islandLyricsStatus">
+                  <span className="islandWaveform playing mini" aria-hidden="true"><span /><span /><span /></span>
+                  <span>{id ? 'Memuat lirik...' : 'Loading lyrics...'}</span>
+                </div>
+              )}
+              {!lyricsLoading && lyricsError && (
+                <div className="islandLyricsStatus muted">
+                  <span>{lyricsError}</span>
+                </div>
+              )}
+              {!lyricsLoading && !lyricsError && lyricsLines.length > 0 && (
+                <div className="islandLyricsList">
+                  {lyricsLines.map((line, idx) => {
+                    const isActive = idx === activeLyricIndex;
+                    return (
+                      <div
+                        key={`${line.time}-${idx}`}
+                        ref={isActive ? activeLyricRef : null}
+                        className={`islandLyricLine ${isActive ? 'active' : ''}`}
+                      >
+                        {line.text}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {!lyricsLoading && !lyricsError && !lyricsLines.length && plainLyrics.length > 0 && (
+                <div className="islandLyricsList plain">
+                  {plainLyrics.map((text, idx) => (
+                    <div key={idx} className="islandLyricLine plain">
+                      {text}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         {tab === 'pet' && <div className="islandPet">
           <PixelDuck scene={pet} size={84} />
           <div className="islandPetPicker">

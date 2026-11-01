@@ -5,8 +5,8 @@ import { ChevronDown, Search, X } from 'lucide-react';
 import { defaultDuckiesDisplay, duckiesDisplayKey, readDuckiesDisplay, type DuckiesDisplay } from '@/lib/duckies-display';
 
 // allowedApps absent = every app's notifications reach the island; a list = only those apps.
-type Settings = { enabled: boolean; notifications: boolean; sound: boolean; allowedApps?: string[] };
-const defaults: Settings = { enabled: false, notifications: false, sound: false };
+type Settings = { enabled: boolean; notifications: boolean; sound: boolean; allowedApps?: string[]; hideWindowsBanners?: boolean };
+const defaults: Settings = { enabled: false, notifications: false, sound: false, hideWindowsBanners: true };
 const storageKey = 'lifeos-duckies-settings';
 
 export function DuckiesSettings({ lang }: { lang: 'id' | 'en' }) {
@@ -44,10 +44,10 @@ export function DuckiesSettings({ lang }: { lang: 'id' | 'en' }) {
       else localStorage.setItem(storageKey, JSON.stringify(next));
     } finally { setBusy(false); }
   }
-  const toggle = (key: 'enabled' | 'notifications' | 'sound', label: string, hint: string) => (
+  const toggle = (key: 'enabled' | 'notifications' | 'sound' | 'hideWindowsBanners', label: string, hint: string) => (
     <label className="duckiesToggle">
       <span className="toggle">
-        <input type="checkbox" checked={settings[key]} disabled={busy || !desktop} onChange={event => void update({ [key]: event.target.checked })} />
+        <input type="checkbox" checked={Boolean(settings[key])} disabled={busy || !desktop} onChange={event => void update({ [key]: event.target.checked })} />
         <span className="slider" aria-hidden="true"></span>
       </span>
       <span><b>{label}</b><small>{hint}</small></span>
@@ -89,6 +89,7 @@ export function DuckiesSettings({ lang }: { lang: 'id' | 'en' }) {
         </details>
         {allowed && <div className="duckiesChips">{allowed.map(app => <button type="button" key={app} disabled={filterDisabled} onClick={() => flip(app)} aria-label={`${id ? 'Hapus' : 'Remove'} ${app}`}>{app}<X size={12} aria-hidden="true" /></button>)}</div>}
       </div>
+      {settings.notifications && desktop && toggle('hideWindowsBanners', id ? 'Sembunyikan pop-up Windows untuk aplikasi di atas' : 'Hide Windows banners for selected apps', id ? 'Matikan banner pop-up di pojok layar Windows agar notifikasi hanya muncul di Duckies.' : 'Suppress native Windows corner banners so notifications appear exclusively in Duckies.')}
       {toggle('sound', id ? 'Suara Duckies' : 'Duckies sound', id ? 'Bunyi chime pendek bersama notifikasi Duckies.' : 'Play a short chime with Duckies alerts.')}
       <fieldset className="duckiesDisplay">
         <legend><b>{id ? 'Tampilan tengah island' : 'Island center display'}</b><small>{id ? 'Yang tampil di tengah saat Duckies idle.' : 'What shows in the middle while Duckies is idle.'}</small></legend>
@@ -104,5 +105,22 @@ export function DuckiesSettings({ lang }: { lang: 'id' | 'en' }) {
 }
 
 declare global {
-  interface Window { lifeOsDuckies?: { getSettings: () => Promise<Settings>; setSettings: (settings: Settings) => Promise<Settings>; getKnownApps?: () => Promise<string[]>; resize: (height: number, width: number) => void; setShape?: (rect: { x: number; y: number; width: number; height: number }) => void; readClipboard?: () => Promise<{ files?: { name: string; size: number }[]; image?: { size: number; preview: string }; text?: string; error?: string; output?: string }>; showNotification?: (input: { title: string; body?: string; tone?: string }) => void; onToast?: (listener: (toast: { title: string; body: string; tone: string; image?: string }) => void) => () => void; onSettings?: (listener: (settings: Settings) => void) => () => void } }
+  interface Window {
+    lifeOsDuckies?: {
+      getSettings: () => Promise<Settings>;
+      setSettings: (settings: Settings) => Promise<Settings>;
+      getKnownApps?: () => Promise<string[]>;
+      resize: (height: number, width: number) => void;
+      setShape?: (rect: { x: number; y: number; width: number; height: number }) => void;
+      readClipboard?: () => Promise<{ files?: { name: string; size: number }[]; image?: { size: number; preview: string }; text?: string; error?: string; output?: string }>;
+      showNotification?: (input: { title: string; body?: string; tone?: string }) => void;
+      onToast?: (listener: (toast: { title: string; body: string; tone: string; image?: string }) => void) => () => void;
+      onSettings?: (listener: (settings: Settings) => void) => () => void;
+      getAudioMedia?: () => Promise<{ volume: { level: number; muted: boolean } | null; media: any | null }>;
+      mediaControl?: (action: 'playPause' | 'next' | 'previous') => void;
+      setVolume?: (level: number) => void;
+      onVolumeChange?: (listener: (data: { type: 'volume'; level: number; muted: boolean; initial?: boolean }) => void) => () => void;
+      onMediaChange?: (listener: (data: any) => void) => () => void;
+    };
+  }
 }
