@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { parseLocalTodos, todoStorageKey } from '@/lib/local-todos';
 import { filterTasks } from '@/lib/task-view';
@@ -93,6 +94,8 @@ export function EditableTodoList({ lang, expanded = false }: { lang: Lang; expan
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const visibleTodos = expanded ? filterTasks(todos, filter, search) : todos;
+  const hasMore = !expanded && visibleTodos.length > 3;
+  const displayedTodos = hasMore ? visibleTodos.slice(0, 3) : visibleTodos;
 
   async function request(url: string, options?: RequestInit) {
     const response = await fetch(url, { cache: 'no-store', ...options });
@@ -160,7 +163,7 @@ export function EditableTodoList({ lang, expanded = false }: { lang: Lang; expan
       </div>
     </details>}
     {loading ? <div role="status" aria-busy="true" aria-label={id ? 'Memuat tugas' : 'Loading tasks'}><TodoRowsSkeleton /></div> : <div className="list" style={{ display: 'grid', gap: '8px', marginBottom: '20px' }}>
-      {visibleTodos.map(todo => <div key={todo.id} style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px', padding: '12px', borderRadius: '8px', background: 'var(--surface2)' }}>
+      {displayedTodos.map(todo => <div key={todo.id} style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px', padding: '12px', borderRadius: '8px', background: 'var(--surface2)' }}>
         <input type="checkbox" checked={todo.done} disabled={busy} aria-label={`Toggle ${todo.label}`} onChange={() => mutate(async () => {
           const saved = await request(`/api/todos/${todo.id}`, json('PUT', { done: !todo.done }));
           setTodos(current => current.map(row => row.id === todo.id ? saved : row));
@@ -174,6 +177,11 @@ export function EditableTodoList({ lang, expanded = false }: { lang: Lang; expan
           if (editingId === todo.id) { setEditingId(null); setNewTodo(''); }
         }); }}><Trash2 size={15}/></button>
       </div>)}
+      {hasMore && <div style={{ display: 'flex', justifyContent: 'flex-start', marginTop: '2px' }}>
+        <Link href="/todoist/inbox" className="card-link" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'none', fontSize: '13px', fontWeight: 600 }}>
+          {id ? 'Lihat selengkapnya' : 'Show more'} &rarr;
+        </Link>
+      </div>}
       {!visibleTodos.length && <p className="muted">{id ? 'Tidak ada tugas dalam tampilan ini. Tambahkan tugas atau ubah filter.' : 'No tasks in this view. Add a task or change the filter.'}</p>}
     </div>}
     <form className="dailyQuestForm dailyQuestFormWithPriority" onSubmit={event => {
