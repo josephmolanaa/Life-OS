@@ -4,6 +4,30 @@ const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
 
+// ponytail: swallow EPIPE globally on stdout/stderr for GUI sessions where stdio pipes close.
+for (const stream of [process.stdout, process.stderr]) {
+  if (stream && typeof stream.on === 'function') {
+    stream.on('error', err => { if (err?.code === 'EPIPE') return; });
+  }
+}
+for (const method of ['log', 'info', 'warn', 'error', 'debug']) {
+  if (typeof console?.[method] === 'function') {
+    const original = console[method];
+    console[method] = (...args) => {
+      try { original.apply(console, args); } catch (err) {
+        if (err?.code === 'EPIPE') return;
+        throw err;
+      }
+    };
+  }
+}
+if (typeof process.on === 'function') {
+  process.on('uncaughtException', err => {
+    if (err?.code === 'EPIPE') return;
+    console.error('Uncaught exception in main process:', err);
+  });
+}
+
 const { randomBytes } = require('node:crypto');
 const activitySecret = randomBytes(32).toString('hex');
 let activityEpoch = 0;
@@ -210,7 +234,6 @@ ipcMain.on('lifeos:duckies-resize', safeListener((event, bounds) => { assertDuck
 const duckiesCanvas = { width: 600, height: 260 };
 ipcMain.on('lifeos:duckies-shape', safeListener((event, rect) => {
   assertDuckiesWindow(event);
-  console.log('[Duckies] shape received:', JSON.stringify(rect));
   const values = [rect?.x, rect?.y, rect?.width, rect?.height];
   if (!values.every(Number.isInteger) || rect.x < 0 || rect.y < 0 || rect.width < 1 || rect.height < 1 || rect.x + rect.width > duckiesCanvas.width || rect.y + rect.height > duckiesCanvas.height) { console.warn('[Duckies] Invalid shape rejected:', JSON.stringify(rect)); return; }
   if (duckiesWindow && !duckiesWindow.isDestroyed()) duckiesWindow.setShape([{ x: rect.x, y: rect.y, width: rect.width, height: rect.height }]);
