@@ -71,6 +71,39 @@ function writeDuckiesSettings(next) {
   fs.writeFileSync(duckiesSettingsPath(), JSON.stringify(duckiesSettings), { mode: 0o600 });
   return duckiesSettings;
 }
+
+let windowState;
+const windowStatePath = () => path.join(app.getPath('userData'), 'window-state.json');
+const defaultWindowState = { width: 1521, height: 800, isMaximized: false };
+function readWindowState() {
+  if (windowState) return windowState;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(windowStatePath(), 'utf8'));
+    windowState = { ...defaultWindowState, ...parsed };
+  } catch { windowState = { ...defaultWindowState }; }
+  return windowState;
+}
+function saveWindowState() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  try {
+    const isMaximized = typeof mainWindow.isMaximized === 'function' ? mainWindow.isMaximized() : false;
+    let state;
+    if (isMaximized) {
+      const prev = readWindowState();
+      state = { ...prev, isMaximized: true };
+    } else {
+      const bounds = typeof mainWindow.getBounds === 'function' ? mainWindow.getBounds() : null;
+      if (bounds && Number.isInteger(bounds.width) && Number.isInteger(bounds.height)) {
+        state = { width: bounds.width, height: bounds.height, x: bounds.x, y: bounds.y, isMaximized: false };
+      }
+    }
+    if (state) {
+      windowState = state;
+      fs.mkdirSync(app.getPath('userData'), { recursive: true });
+      fs.writeFileSync(windowStatePath(), JSON.stringify(windowState), { mode: 0o600 });
+    }
+  } catch (error) { console.error('Failed to save window state:', error); }
+}
 function assertDuckiesRenderer(event) {
   if (![mainWindow?.webContents, duckiesWindow?.webContents].includes(event.sender) || event.senderFrame !== event.sender.mainFrame) throw new Error('Untrusted frame');
   const origin = new URL(event.senderFrame.url).origin;
@@ -319,6 +352,7 @@ function startDuckiesAudioMedia() {
     duckiesAudioMediaProcess = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-STA', '-ExecutionPolicy', 'Bypass', '-File', script], { windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'] });
   } catch (error) { console.error('Duckies audio/media listener unavailable:', error); return; }
   let buffer = '';
+  duckiesAudioMediaProcess.stdout?.setEncoding?.('utf8');
   duckiesAudioMediaProcess.stdout?.on('data', chunk => {
     buffer += chunk;
     const lines = buffer.split(/\r?\n/);
@@ -594,9 +628,10 @@ async function startProductionServer() {
 }
 
 async function createWindow() {
-  mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
+  const state = readWindowState();
+  const windowOptions = {
+    width: Number.isInteger(state.width) && state.width >= 300 ? state.width : 1521,
+    height: Number.isInteger(state.height) && state.height >= 200 ? state.height : 800,
     show: false,
     webPreferences: {
       nodeIntegration: false,
@@ -605,8 +640,46 @@ async function createWindow() {
       backgroundThrottling: false,
       preload: path.join(__dirname, 'preload.cjs'),
     },
-  });
+  };
+
+  if (Number.isInteger(state.x) && Number.isInteger(state.y)) {
+    try {
+      const { screen } = require('electron');
+      const displays = screen?.getAllDisplays?.() || [];
+      const isVisible = displays.some(display => {
+        const { x, y, width, height } = display.workArea;
+        return (
+          state.x >= x - 50 &&
+          state.y >= y - 50 &&
+          state.x < x + width &&
+          state.y < y + height
+        );
+      });
+      if (isVisible) {
+        windowOptions.x = state.x;
+        windowOptions.y = state.y;
+      }
+    } catch {}
+  }
+
+  mainWindow = new BrowserWindow(windowOptions);
+
+  if (state.isMaximized && typeof mainWindow.maximize === 'function') {
+    mainWindow.maximize();
+  }
+
+  let saveTimer;
+  const debouncedSave = () => {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveWindowState, 300);
+  };
+  mainWindow.on('resize', debouncedSave);
+  mainWindow.on('move', debouncedSave);
+  mainWindow.on('maximize', saveWindowState);
+  mainWindow.on('unmaximize', saveWindowState);
+
   mainWindow.on('close', (event) => {
+    saveWindowState();
     if (!quitting && tray) {
       event.preventDefault();
       startHidden = true;
@@ -614,7 +687,10 @@ async function createWindow() {
     }
   });
   mainWindow.on('closed', () => { mainWindow = undefined; });
-  mainWindow.on('session-end', stopServer);
+  mainWindow.on('session-end', () => {
+    saveWindowState();
+    stopServer();
+  });
 
   if (app.isPackaged) {
     try {
@@ -694,6 +770,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   quitting = true;
+  saveWindowState();
   for (const key of suppressedBannerKeys) {
     try {
       const cp = require('node:child_process');

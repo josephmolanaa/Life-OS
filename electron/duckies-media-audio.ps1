@@ -1,6 +1,8 @@
 # Streams Windows Master Volume changes and GSMTC media playback to stdout as JSON lines.
 # Accepts control commands on stdin (playPause, next, previous, setVolume <val>, setMute <0|1>, exit).
 $ErrorActionPreference = 'SilentlyContinue'
+# OEM codepage best-fits curly quotes in titles to '"', which breaks the JSON line; emit UTF-8 instead.
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 
 $code = @"
 using System;
@@ -138,6 +140,8 @@ $lastSentTime = [DateTime]::MinValue
 $cachedThumbnail = ""
 $cachedThumbKey = ""
 $tick = 0
+$mgrAge = 0
+$shownSession = $null
 
 [Console]::Out.WriteLine((@{ type = 'ready' } | ConvertTo-Json -Compress))
 
@@ -146,14 +150,13 @@ while ($true) {
     $cmd = [DuckiesAudio.StdinReader]::PopCommand()
     if ($cmd) {
         if ($cmd -eq 'exit') { break }
-        if ($cmd -eq 'playPause' -and $mgr) {
-            $s = $mgr.GetCurrentSession()
+        # Control the session the island is showing, not whatever Windows calls "current".
+        $s = if ($shownSession) { $shownSession } elseif ($mgr) { $mgr.GetCurrentSession() } else { $null }
+        if ($cmd -eq 'playPause') {
             if ($s) { $s.TryTogglePlayPauseAsync() | Out-Null }
-        } elseif ($cmd -eq 'next' -and $mgr) {
-            $s = $mgr.GetCurrentSession()
+        } elseif ($cmd -eq 'next') {
             if ($s) { $s.TrySkipNextAsync() | Out-Null }
-        } elseif ($cmd -eq 'previous' -and $mgr) {
-            $s = $mgr.GetCurrentSession()
+        } elseif ($cmd -eq 'previous') {
             if ($s) { $s.TrySkipPreviousAsync() | Out-Null }
         } elseif ($cmd.StartsWith('setVolume ')) {
             $val = [float]($cmd.Substring(10))
@@ -186,6 +189,14 @@ while ($true) {
     $tick++
     if ($tick -ge 3) {
         $tick = 0
+        # STA thread has no message pump, so a long-lived manager never sees session add/remove/update events and
+        # keeps reporting a stale track. Re-request it every ~1.5s to get a fresh snapshot.
+        $mgrAge++
+        if (-not $mgr -or $mgrAge -ge 5) {
+            $mgrAge = 0
+            $fresh = Await ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager])
+            if ($fresh) { $mgr = $fresh }
+        }
         if ($mgr) {
             try {
                 $session = $null
@@ -226,6 +237,7 @@ while ($true) {
                 if (-not $session) {
                     $session = $mgr.GetCurrentSession()
                 }
+                $shownSession = $session
                 if ($session) {
                     $playback = $session.GetPlaybackInfo()
                     $status = "$($playback.PlaybackStatus)"

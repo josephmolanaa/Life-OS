@@ -19,6 +19,57 @@ const nextPriority: Record<Priority, Priority> = { MEDIUM: 'HIGH', HIGH: 'LOW', 
 type ShelfItem = { id: number; name: string; detail: string; url?: string; text?: string };
 type LyricLine = { time: number; text: string };
 
+// Marquee: seamless scrolling text for titles that overflow container width.
+function Marquee({ text, className = '' }: { text: string; className?: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLSpanElement>(null);
+  const [needsScroll, setNeedsScroll] = useState(false);
+  const [duration, setDuration] = useState(16);
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    const textEl = textRef.current;
+    if (!container || !textEl) return;
+
+    const measure = () => {
+      const textWidth = textEl.scrollWidth;
+      const containerWidth = container.clientWidth;
+      const overflows = textWidth > containerWidth + 4;
+      setNeedsScroll(overflows);
+      if (overflows) {
+        const dur = Math.max(10, Math.min(28, Math.round((textWidth + 48) / 35)));
+        setDuration(dur);
+      }
+    };
+
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, [text]);
+
+  return (
+    <div
+      ref={containerRef}
+      className={`islandMarquee ${needsScroll ? 'scrolling' : ''} ${className}`}
+    >
+      <div
+        className={`islandMarqueeTrack ${needsScroll ? 'animateMarquee' : ''}`}
+        style={needsScroll ? { animationDuration: `${duration}s` } : undefined}
+      >
+        <span ref={textRef}>{text}</span>
+        {needsScroll && (
+          <>
+            <span className="islandMarqueeGap" aria-hidden="true" />
+            <span aria-hidden="true">{text}</span>
+            <span className="islandMarqueeGap" aria-hidden="true" />
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function parseLrc(lrcText: string): LyricLine[] {
   const lines: LyricLine[] = [];
   const regex = /\[(\d{2}):(\d{2})(?:\.(\d{2,3}))?\](.*)/;
@@ -119,7 +170,9 @@ export default function DuckiesPage() {
   const volumeTimer = useRef<number | undefined>(undefined);
   const [media, setMedia] = useState<MediaState | null>(null);
   const [mediaPos, setMediaPos] = useState(0);
-  const [albumArtUrl, setAlbumArtUrl] = useState<string>('');
+  const mediaAnchor = useRef<{ pos: number; time: number; playing: boolean }>({ pos: 0, time: 0, playing: false });
+  const lastMediaKey = useRef<string>('');
+const [albumArtUrl, setAlbumArtUrl] = useState<string>('');
   const currentThumbnail = albumArtUrl || media?.thumbnail || '';
   const [showLyrics, setShowLyrics] = useState(false);
   const [lyricsLines, setLyricsLines] = useState<LyricLine[]>([]);
@@ -189,6 +242,11 @@ export default function DuckiesPage() {
       if (state?.media) {
         setMedia(state.media);
         setMediaPos(state.media.position || 0);
+        mediaAnchor.current = {
+          pos: state.media.position || 0,
+          time: performance.now(),
+          playing: state.media.status === 'Playing',
+        };
       }
     }).catch(() => {});
 
@@ -205,7 +263,41 @@ export default function DuckiesPage() {
     // Listen for media changes from Windows GSMTC
     const offMedia = window.lifeOsDuckies?.onMediaChange?.(incoming => {
       setMedia(incoming);
-      if (typeof incoming?.position === 'number') setMediaPos(incoming.position);
+      if (typeof incoming?.position !== 'number') return;
+      const now = performance.now();
+      const sameTrack = lastMediaKey.current === `${incoming.sourceAppId}|${incoming.title}|${incoming.artist}`;
+      lastMediaKey.current = `${incoming.sourceAppId}|${incoming.title}|${incoming.artist}`;
+      const isPlaying = incoming.status === 'Playing';
+
+      if (!sameTrack) {
+        mediaAnchor.current = { pos: incoming.position, time: now, playing: isPlaying };
+        setMediaPos(incoming.position);
+        return;
+      }
+
+      if (!isPlaying) {
+        mediaAnchor.current = { pos: incoming.position, time: now, playing: false };
+        setMediaPos(incoming.position);
+        return;
+      }
+
+      // Track is playing: calculate estimated position on our smooth clock
+      const currentEst = mediaAnchor.current.playing
+        ? mediaAnchor.current.pos + (now - mediaAnchor.current.time) / 1000
+        : mediaAnchor.current.pos;
+      const diff = incoming.position - currentEst;
+
+      // User seeked (|diff| > 2.5s) or local clock fell behind (diff > 0.8s): re-anchor immediately
+      if (Math.abs(diff) > 2.5 || diff > 0.8) {
+        mediaAnchor.current = { pos: incoming.position, time: now, playing: true };
+        setMediaPos(incoming.position);
+      } else if (diff < -0.3) {
+        // GSMTC sent a slightly lagged position (0.3s - 2.5s behind).
+        // Ignore to prevent rollback/stutter; keep advancing smoothly.
+      } else {
+        // Close sync: gently re-anchor without jumping
+        mediaAnchor.current = { pos: incoming.position, time: now, playing: true };
+      }
     });
 
     return () => {
@@ -217,13 +309,19 @@ export default function DuckiesPage() {
     };
   }, []);
 
-  // Smooth playback clock: anchor on each reported position, then advance by real elapsed time.
+  // Smooth playback clock: advance from the latest anchor
   useEffect(() => {
-    if (media?.status !== 'Playing' || !media.duration) return;
-    const start = performance.now(), base = media.position || 0, end = media.duration;
-    const ticker = window.setInterval(() => setMediaPos(Math.min(end, base + (performance.now() - start) / 1000)), 250);
+    if (media?.status !== 'Playing') return;
+    const dur = media?.duration || 0;
+    const ticker = window.setInterval(() => {
+      if (!mediaAnchor.current.playing) return;
+      const elapsed = (performance.now() - mediaAnchor.current.time) / 1000;
+      const current = mediaAnchor.current.pos + elapsed;
+      const clamped = dur > 0 ? Math.min(dur, current) : current;
+      setMediaPos(clamped);
+    }, 200);
     return () => window.clearInterval(ticker);
-  }, [media?.status, media?.duration, media?.position]);
+  }, [media?.status, media?.duration]);
 
   // Fetch high-res artwork from iTunes and synced lyrics from LRCLIB
   useEffect(() => {
@@ -697,7 +795,7 @@ export default function DuckiesPage() {
               </div>
               <div className="islandMediaTrackInfo">
                 <strong className="islandMediaTitle" title={media?.title || (id ? 'Tidak ada musik diputar' : 'No music playing')}>
-                  {media?.title || (id ? 'Tidak ada musik' : 'No music playing')}
+                  <Marquee text={media?.title || (id ? 'Tidak ada musik' : 'No music playing')} />
                 </strong>
                 <span className="islandMediaArtist" title={media?.artist || ''}>
                   {media?.artist || (id ? 'Buka Spotify, YouTube, atau pemutar media lainnya' : 'Open Spotify, YouTube, or any media player')}
@@ -788,7 +886,7 @@ export default function DuckiesPage() {
                 </button>
               </div>
               <div className="islandLyricsMeta">
-                <strong className="islandLyricsTitle" title={media?.title}>{media?.title || (id ? 'Musik' : 'Music')}</strong>
+                <strong className="islandLyricsTitle" title={media?.title}><Marquee text={media?.title || (id ? 'Musik' : 'Music')} /></strong>
                 <span className="islandLyricsArtist" title={media?.artist}>{media?.artist || ''}</span>
               </div>
               <div className="islandLyricsProgressWrap">
