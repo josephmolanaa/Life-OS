@@ -23,6 +23,7 @@ import {
   FileText,
   Calendar,
   CalendarRange,
+  Lightbulb,
   LogOut
 } from 'lucide-react';
 import { QuickFab } from './quick-fab';
@@ -78,6 +79,12 @@ const navGroups = [
     ],
   },
   {
+    title: 'Ideas & Inversion',
+    items: [
+      { href: '/ideas', label: 'Bunch Of Ideas', Icon: Lightbulb },
+    ],
+  },
+  {
     title: 'System',
     items: [
       { href: '/settings', label: 'Settings', Icon: Settings },
@@ -85,13 +92,13 @@ const navGroups = [
   },
 ];
 const groupLabels: Record<Lang, Record<string, string>> = {
-  en: { Todoist: 'Todoist', Main: 'Main', Finance: 'Finance', Tools: 'Tools', Pillars: 'Pillars', Study: 'Study', System: 'System' },
-  id: { Todoist: 'Todoist', Main: 'Utama', Finance: 'Keuangan', Tools: 'Alat', Pillars: 'Pilar', Study: 'Studi', System: 'Sistem' },
+  en: { Todoist: 'Todoist', Main: 'Main', Finance: 'Finance', Tools: 'Tools', Pillars: 'Pillars', Study: 'Study', 'Ideas & Inversion': 'Ideas & Inversion', System: 'System' },
+  id: { Todoist: 'Todoist', Main: 'Utama', Finance: 'Keuangan', Tools: 'Alat', Pillars: 'Pilar', Study: 'Studi', 'Ideas & Inversion': 'Ideas & Inversion', System: 'Sistem' },
 };
 
 const navLabels: Record<Lang, Record<string, string>> = {
-  en: { '/todoist/inbox': 'Inbox', '/todoist/today': 'Today', '/todoist/upcoming': 'Upcoming', '/': 'Dashboard', '/finance': 'Overview', '/finance/reports': 'Reports', '/finance/loans': 'Loans', '/activitywatch': 'Activity', '/habits': 'Habits', '/diary': 'Diary', '/career': 'Career', '/physique': 'Physique', '/social': 'Social', '/discipline': 'Discipline', '/study/jadwal': 'Schedule', '/study/rps': 'RPS', '/settings': 'Settings' },
-  id: { '/todoist/inbox': 'Inbox', '/todoist/today': 'Hari ini', '/todoist/upcoming': 'Mendatang', '/': 'Dasbor', '/finance': 'Ringkasan', '/finance/reports': 'Laporan', '/finance/loans': 'Utang', '/activitywatch': 'Aktivitas', '/habits': 'Kebiasaan', '/diary': 'Catatan', '/career': 'Karier', '/physique': 'Fisik', '/social': 'Sosial', '/discipline': 'Disiplin', '/study/jadwal': 'Jadwal', '/study/rps': 'RPS', '/settings': 'Pengaturan' },
+  en: { '/todoist/inbox': 'Inbox', '/todoist/today': 'Today', '/todoist/upcoming': 'Upcoming', '/': 'Dashboard', '/finance': 'Overview', '/finance/reports': 'Reports', '/finance/loans': 'Loans', '/activitywatch': 'Activity', '/habits': 'Habits', '/diary': 'Diary', '/career': 'Career', '/physique': 'Physique', '/social': 'Social', '/discipline': 'Discipline', '/study/jadwal': 'Schedule', '/study/rps': 'RPS', '/ideas': 'Bunch Of Ideas', '/settings': 'Settings' },
+  id: { '/todoist/inbox': 'Inbox', '/todoist/today': 'Hari ini', '/todoist/upcoming': 'Mendatang', '/': 'Dasbor', '/finance': 'Ringkasan', '/finance/reports': 'Laporan', '/finance/loans': 'Utang', '/activitywatch': 'Aktivitas', '/habits': 'Kebiasaan', '/diary': 'Catatan', '/career': 'Karier', '/physique': 'Fisik', '/social': 'Sosial', '/discipline': 'Disiplin', '/study/jadwal': 'Jadwal', '/study/rps': 'RPS', '/ideas': 'Bunch Of Ideas', '/settings': 'Pengaturan' },
 };
 export function Topbar({ title }: { title: string }) {
   const [email, setEmail] = useState('');

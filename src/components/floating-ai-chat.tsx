@@ -16,8 +16,8 @@ const scopeLabels: Record<ReviewScope, { en: string; id: string }> = {
 const defaultReview: ReviewOptions = { days: 30, scopes: [] };
 
 export function FloatingAiChat() {
-  const { userId, config } = useAiSettings();
-  return <AiChat key={`${userId}:${config.provider}:${config.baseUrl}:${config.model}`} userId={userId} />;
+  // Floating Life OS AI and bottom-left launcher icon deactivated per user request
+  return null;
 }
 
 function MarkdownMessage({ content }: { content: string }) {
