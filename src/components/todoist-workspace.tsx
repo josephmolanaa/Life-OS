@@ -27,7 +27,6 @@ export default function TodoistWorkspace({ view }: { view: TaskView }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const lock = useRef(false);
   const [today, setToday] = useState(localDate);
   const [start, setStart] = useState(localDate);
   const [layout, setLayout] = useState<Layout>('list');
@@ -66,18 +65,18 @@ export default function TodoistWorkspace({ view }: { view: TaskView }) {
       document.removeEventListener('pointerdown', onPointerDown);
     };
   }, []);
-  async function mutate(action: () => Promise<void>) {
-    if (lock.current) return;
-    lock.current = true; setBusy(true); setError('');
-    try { await action(); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to save task'); }
-    finally { lock.current = false; setBusy(false); }
-  }
   const monthLast = (value: string) => addDays(`${value.slice(0, 8)}01`, 32).slice(0, 7) + '-01';
   const monthEnd = (value: string) => addDays(monthLast(value), -1);
-  const calendarStart = (() => { const first = `${month.slice(0, 7)}-01`; const day = new Date(`${first}T12:00:00`).getDay(); return addDays(first, day === 0 ? -6 : 1 - day); })();
-  const calendarDays = Array.from({ length: 42 }, (_, index) => addDays(calendarStart, index));
-  const calendarEnd = calendarDays[calendarDays.length - 1];
-  const rows = visibleTasks(tasks, view, today, start, completed, priority, search, sort, layout === 'calendar' && view === 'upcoming' ? calendarEnd : undefined);
+  const { calendarDays, calendarEnd } = useMemo(() => {
+    const first = `${month.slice(0, 7)}-01`;
+    const day = new Date(`${first}T12:00:00`).getDay();
+    const calStart = addDays(first, day === 0 ? -6 : 1 - day);
+    const days = Array.from({ length: 42 }, (_, index) => addDays(calStart, index));
+    return { calendarDays: days, calendarEnd: days[days.length - 1] };
+  }, [month]);
+  const rows = useMemo(() => {
+    return visibleTasks(tasks, view, today, start, completed, priority, search, sort, layout === 'calendar' && view === 'upcoming' ? calendarEnd : undefined);
+  }, [tasks, view, today, start, completed, priority, search, sort, layout, calendarEnd]);
 
   // Notion-style horizontal Gantt Timeline computations
   const ganttTasks = useMemo(() => {
@@ -301,18 +300,152 @@ export default function TodoistWorkspace({ view }: { view: TaskView }) {
     }
   }, [view, timelineTab, timelineAnchor, todayLineLeft]);
 
-  const days = Array.from({ length: 7 }, (_, index) => addDays(start, index));
+  const days = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(start, index)), [start]);
   const dateLabel = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString(id ? 'id-ID' : 'en-US', { weekday: 'long', day: 'numeric', month: 'short' });
   const priorityLabel = (value: string) => ({ HIGH: text('High', 'Tinggi'), MEDIUM: text('Medium', 'Sedang'), LOW: text('Low', 'Rendah') }[value] || value);
-  const groups = new Map<string, Task[]>();
-  if (view === 'upcoming') days.forEach(day => groups.set(day, []));
-  if (view === 'today') { if (rows.some(task => task.due_date! < today)) groups.set('overdue', []); groups.set(today, []); }
-  for (const task of rows) {
-    const key = view === 'upcoming' ? task.due_date! : view === 'today' ? task.due_date! < today ? 'overdue' : today : grouping === 'date' ? task.due_date || 'undated' : grouping === 'priority' ? task.priority : 'all';
-    groups.set(key, [...(groups.get(key) || []), task]);
-  }
-  if (!groups.size) groups.set('all', []);
+  const groups = useMemo(() => {
+    const map = new Map<string, Task[]>();
+    if (view === 'upcoming') days.forEach(day => map.set(day, []));
+    if (view === 'today') {
+      if (rows.some(task => task.due_date! < today)) map.set('overdue', []);
+      map.set(today, []);
+    }
+    for (const task of rows) {
+      const key = view === 'upcoming' ? task.due_date! : view === 'today' ? (task.due_date! < today ? 'overdue' : today) : grouping === 'date' ? (task.due_date || 'undated') : grouping === 'priority' ? task.priority : 'all';
+      const existing = map.get(key);
+      if (existing) {
+        existing.push(task);
+      } else {
+        map.set(key, [task]);
+      }
+    }
+    if (!map.size) map.set('all', []);
+    return map;
+  }, [rows, view, days, today, grouping]);
+
   const openAdd = (date = '', time = '') => setDraft({ label: '', priority: 'MEDIUM', due_date: dates ? date : '', due_time: time, start_time: '', end_time: '' });
+  const openEdit = (task: Task) => setDraft({
+    id: task.id,
+    label: task.label,
+    priority: task.priority,
+    due_date: task.due_date || '',
+    due_time: task.due_time ? task.due_time.slice(0, 5) : '',
+    start_time: task.start_time || '',
+    end_time: task.end_time || '',
+  });
+
+  const handleToggle = (task: Task) => {
+    const nextDone = !task.done;
+    setTasks(current => current.map(row => row.id === task.id ? { ...row, done: nextDone } : row));
+    request(`/api/todos/${task.id}`, 'PUT', { done: nextDone }).catch(cause => {
+      setTasks(current => current.map(row => row.id === task.id ? { ...row, done: !nextDone } : row));
+      setError(cause instanceof Error ? cause.message : 'Unable to save task');
+    });
+  };
+
+  const handleDelete = (taskId: string) => {
+    const previous = tasks;
+    setTasks(current => current.filter(row => row.id !== taskId));
+    if (draft?.id === taskId) setDraft(null);
+    request(`/api/todos/${taskId}`, 'DELETE').catch(cause => {
+      setTasks(previous);
+      setError(cause instanceof Error ? cause.message : 'Unable to delete task');
+    });
+  };
+
+  const handleSaveDraft = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!draft || !draft.label.trim()) return;
+    const parsed = dates ? parseTaskDateInput(draft.label, today) : { label: draft.label, dueDate: null, dueTime: null };
+    const finalLabel = (parsed.dueDate || (times && parsed.dueTime)) ? (parsed.label || draft.label) : draft.label;
+    const finalDate = (parsed.dueDate || draft.due_date) ? (parsed.dueDate || draft.due_date) : null;
+    const finalTime = (times && (parsed.dueTime || draft.due_time)) ? (parsed.dueTime || draft.due_time) : null;
+
+    if (draft.id) {
+      const taskId = draft.id;
+      const existing = tasks.find(t => t.id === taskId);
+      const optimistic: Task = {
+        ...(existing || { id: taskId, done: false, list_kind: 'task', created_at: new Date().toISOString() }),
+        label: finalLabel,
+        priority: draft.priority,
+        due_date: finalDate,
+        due_time: finalTime || draft.start_time || null,
+        start_time: draft.start_time || null,
+        end_time: draft.end_time || null,
+      };
+      setTasks(current => current.map(t => t.id === taskId ? optimistic : t));
+      setDraft(null);
+
+      request(`/api/todos/${taskId}`, 'PUT', {
+        label: finalLabel,
+        priority: draft.priority,
+        ...(dates ? { due_date: finalDate } : {}),
+        ...(times ? { due_time: finalTime || draft.start_time || null } : {}),
+        start_time: draft.start_time || null,
+        end_time: draft.end_time || null,
+      }).then(saved => {
+        setTasks(current => current.map(t => t.id === taskId ? saved : t));
+      }).catch(cause => {
+        setError(cause instanceof Error ? cause.message : 'Unable to save task');
+        if (existing) {
+          setTasks(current => current.map(t => t.id === taskId ? existing : t));
+        }
+      });
+    } else {
+      setBusy(true);
+      try {
+        const saved = await request('/api/todos', 'POST', {
+          label: finalLabel,
+          priority: draft.priority,
+          list_kind: 'task',
+          ...(dates ? { due_date: finalDate } : {}),
+          ...(times ? { due_time: finalTime || draft.start_time || null } : {}),
+          start_time: draft.start_time || null,
+          end_time: draft.end_time || null,
+        });
+        setTasks(current => [saved, ...current]);
+        setDraft(null);
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : 'Unable to save task');
+      } finally {
+        setBusy(false);
+      }
+    }
+  };
+
+  const renderEditor = (currentDraft: NonNullable<typeof draft>) => (
+    <form key={currentDraft.id || 'new-task'} className={styles.editor} onSubmit={handleSaveDraft}>
+      <label>{text('Task name', 'Nama tugas')}<input autoFocus required maxLength={120} disabled={busy} value={currentDraft.label} onChange={event => {
+        const val = event.target.value;
+        if (dates) {
+          const parsed = parseTaskDateInput(val, today);
+          if (parsed.dueDate || parsed.dueTime) {
+            setDraft({
+              ...currentDraft,
+              label: val,
+              ...(parsed.dueDate ? { due_date: parsed.dueDate } : {}),
+              ...(parsed.dueTime ? { due_time: parsed.dueTime } : {})
+            });
+            return;
+          }
+        }
+        setDraft({ ...currentDraft, label: val });
+      }} /></label>
+      <div className={styles.editorFields}>
+        <label>{text('Date', 'Tanggal')}<input type="date" min="1000-01-01" max="9999-12-31" disabled={busy || !dates} value={currentDraft.due_date} onChange={event => setDraft({ ...currentDraft, due_date: event.target.value })} /></label>
+        <label>{text('Time', 'Waktu')}<input type="time" disabled={busy || !times} value={currentDraft.due_time} onChange={event => setDraft({ ...currentDraft, due_time: event.target.value })} /></label>
+        <label>{text('Start', 'Mulai')}<input type="time" disabled={busy} value={currentDraft.start_time} onChange={event => setDraft({ ...currentDraft, start_time: event.target.value })} /></label>
+        <label>{text('End', 'Selesai')}<input type="time" disabled={busy} value={currentDraft.end_time} onChange={event => setDraft({ ...currentDraft, end_time: event.target.value })} /></label>
+        <label>{text('Priority', 'Prioritas')}<select disabled={busy} value={currentDraft.priority} onChange={event => setDraft({ ...currentDraft, priority: event.target.value as Task['priority'] })}>{(['LOW', 'MEDIUM', 'HIGH'] as const).map(value => <option key={value} value={value}>{priorityLabel(value)}</option>)}</select></label>
+      </div>
+      <div className={styles.actions}><button type="button" disabled={busy} onClick={() => setDraft(null)}>{text('Cancel', 'Batal')}</button><button className="btn" disabled={busy || !currentDraft.label.trim()}>{text('Save task', 'Simpan tugas')}</button></div>
+    </form>
+  );
+
+  const isInlineEditor = (layout === 'list' || layout === 'board') && !!draft?.id;
+  const taskInCurrentView = draft?.id ? rows.some(t => t.id === draft.id) : false;
+  const showTopEditor = draft && (!isInlineEditor || !taskInCurrentView);
+
   const heading = (key: string) => key === 'all' ? '' : key === 'overdue' ? text('Overdue', 'Terlambat') : key === 'undated' ? text('No date', 'Tanpa tanggal') : ['HIGH', 'MEDIUM', 'LOW'].includes(key) ? priorityLabel(key) : `${dateLabel(key)}${key === today ? text(' · Today', ' · Hari ini') : ''}`;
   return <Shell title="Todoist" quickFab={false}><div className={`${styles.workspace} ${layout !== 'list' || view === 'timeline' ? styles.wide : ''}`}>
     <div className={styles.toolbar}><nav aria-label="Todoist">{(['inbox', 'today', 'upcoming', 'timeline'] as const).map(item => <Link key={item} href={`/todoist/${item}`} aria-current={item === view ? 'page' : undefined}>{names[item]}</Link>)}</nav>
@@ -334,7 +467,7 @@ export default function TodoistWorkspace({ view }: { view: TaskView }) {
     {!loading && dates && !times && !error && <p className={styles.notice}>{text('Time scheduling requires database migration 013_todos_due_time.sql.', 'Fitur jam memerlukan migrasi database 013_todos_due_time.sql.')}</p>}
     {view === 'upcoming' && layout !== 'calendar' && <><div className={styles.weekHeader}><strong>{new Date(`${start}T12:00:00`).toLocaleDateString(id ? 'id-ID' : 'en-US', { month: 'long', year: 'numeric' })}</strong><div><button aria-label={text('Previous week', 'Minggu sebelumnya')} onClick={() => setStart(addDays(start, -7))}>‹</button><button onClick={() => setStart(today)}>{names.today}</button><button aria-label={text('Next week', 'Minggu berikutnya')} onClick={() => setStart(addDays(start, 7))}>›</button></div></div><div className={styles.week}>{days.map(day => <a key={day} href={`#day-${day}`} aria-current={day === today ? 'date' : undefined}>{new Date(`${day}T12:00:00`).toLocaleDateString(id ? 'id-ID' : 'en-US', { weekday: 'short', day: 'numeric' })}</a>)}</div></>}
     {layout === 'calendar' && <div className={styles.calendarToolbar}><strong>{new Date(`${month}T12:00:00`).toLocaleDateString(id ? 'id-ID' : 'en-US', { month: 'long', year: 'numeric' })}</strong><div><button aria-label={text('Previous month', 'Bulan sebelumnya')} onClick={() => setMonth(addDays(month, -1).slice(0, 7) + '-01')}>‹</button><button onClick={() => setMonth(today.slice(0, 7) + '-01')}>{names.today}</button><button aria-label={text('Next month', 'Bulan berikutnya')} onClick={() => setMonth(addDays(monthEnd(month), 1).slice(0, 7) + '-01')}>›</button></div></div>}
-    {layout === 'calendar' && <div className={styles.calendar}><div className={styles.calendarWeek}>{['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => <strong key={day}>{text(day, ({ Mon: 'Sen', Tue: 'Sel', Wed: 'Rab', Thu: 'Kam', Fri: 'Jum', Sat: 'Sab', Sun: 'Min' } as Record<string, string>)[day])}</strong>)}</div><div className={styles.calendarGrid}>{calendarDays.map(day => { const items = rows.filter(task => task.due_date === day); return <section key={day} className={`${styles.calendarCell} ${day.slice(0, 7) !== month.slice(0, 7) ? styles.outside : ''} ${day === today ? styles.currentDay : ''}`}><time dateTime={day}>{Number(day.slice(-2))}</time>{items.map(task => <article key={task.id} className={styles.calendarTask}><span className={task.done ? styles.done : ''}>{task.due_time ? `${task.due_time.slice(0, 5)} ` : ''}{task.label}</span><button disabled={busy} aria-label={`${text('Edit', 'Ubah')} ${task.label}`} onClick={() => setDraft({ id: task.id, label: task.label, priority: task.priority, due_date: task.due_date || '', due_time: task.due_time ? task.due_time.slice(0, 5) : '', start_time: task.start_time || '', end_time: task.end_time || '' })}><Pencil size={12} /></button></article>)}<button className={styles.add} disabled={busy || !dates} aria-label={`${text('Add task', 'Tambah tugas')} ${day}`} onClick={() => openAdd(day)}><Plus size={14} /></button></section>})}</div></div>}
+    {layout === 'calendar' && <div className={styles.calendar}><div className={styles.calendarWeek}>{['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => <strong key={day}>{text(day, ({ Mon: 'Sen', Tue: 'Sel', Wed: 'Rab', Thu: 'Kam', Fri: 'Jum', Sat: 'Sab', Sun: 'Min' } as Record<string, string>)[day])}</strong>)}</div><div className={styles.calendarGrid}>{calendarDays.map(day => { const items = rows.filter(task => task.due_date === day); return <section key={day} className={`${styles.calendarCell} ${day.slice(0, 7) !== month.slice(0, 7) ? styles.outside : ''} ${day === today ? styles.currentDay : ''}`}><time dateTime={day}>{Number(day.slice(-2))}</time>{items.map(task => <article key={task.id} className={styles.calendarTask} onClick={() => openEdit(task)}><span className={task.done ? styles.done : ''}>{task.due_time ? `${task.due_time.slice(0, 5)} ` : ''}{task.label}</span><button type="button" aria-label={`${text('Edit', 'Ubah')} ${task.label}`} onClick={event => { event.stopPropagation(); openEdit(task); }}><Pencil size={12} /></button></article>)}<button className={styles.add} disabled={busy || !dates} aria-label={`${text('Add task', 'Tambah tugas')} ${day}`} onClick={() => openAdd(day)}><Plus size={14} /></button></section>})}</div></div>}
 
     {view === 'timeline' && <div className={styles.timelineWrapper}>
       <div className={styles.timelineToolbar}>
@@ -451,54 +584,19 @@ export default function TodoistWorkspace({ view }: { view: TaskView }) {
       </div>
     </div>}
 
-    {draft && <form className={styles.editor} onSubmit={event => { event.preventDefault(); void mutate(async () => {
-      const parsed = dates ? parseTaskDateInput(draft.label, today) : { label: draft.label, dueDate: null, dueTime: null };
-      const finalLabel = (parsed.dueDate || (times && parsed.dueTime)) ? (parsed.label || draft.label) : draft.label;
-      const finalDate = (parsed.dueDate || draft.due_date) ? (parsed.dueDate || draft.due_date) : null;
-      const finalTime = (times && (parsed.dueTime || draft.due_time)) ? (parsed.dueTime || draft.due_time) : null;
-      const saved = await request(draft.id ? `/api/todos/${draft.id}` : '/api/todos', draft.id ? 'PUT' : 'POST', {
-        label: finalLabel,
-        priority: draft.priority,
-        ...(!draft.id ? { list_kind: 'task' } : {}),
-        ...(dates ? { due_date: finalDate } : {}),
-        ...(times ? { due_time: finalTime || draft.start_time || null } : {}),
-        start_time: draft.start_time || null,
-        end_time: draft.end_time || null
-      });
-      setTasks(current => draft.id ? current.map(task => task.id === saved.id ? saved : task) : [saved, ...current]); setDraft(null);
-    }); }}>
-      <label>{text('Task name', 'Nama tugas')}<input autoFocus required maxLength={120} disabled={busy} value={draft.label} onChange={event => {
-        const val = event.target.value;
-        if (dates) {
-          const parsed = parseTaskDateInput(val, today);
-          if (parsed.dueDate || parsed.dueTime) {
-            setDraft({
-              ...draft,
-              label: val,
-              ...(parsed.dueDate ? { due_date: parsed.dueDate } : {}),
-              ...(parsed.dueTime ? { due_time: parsed.dueTime } : {})
-            });
-            return;
-          }
-        }
-        setDraft({ ...draft, label: val });
-      }} /></label>
-      <div className={styles.editorFields}>
-        <label>{text('Date', 'Tanggal')}<input type="date" min="1000-01-01" max="9999-12-31" disabled={busy || !dates} value={draft.due_date} onChange={event => setDraft({ ...draft, due_date: event.target.value })} /></label>
-        <label>{text('Time', 'Waktu')}<input type="time" disabled={busy || !times} value={draft.due_time} onChange={event => setDraft({ ...draft, due_time: event.target.value })} /></label>
-        <label>{text('Start', 'Mulai')}<input type="time" disabled={busy} value={draft.start_time} onChange={event => setDraft({ ...draft, start_time: event.target.value })} /></label>
-        <label>{text('End', 'Selesai')}<input type="time" disabled={busy} value={draft.end_time} onChange={event => setDraft({ ...draft, end_time: event.target.value })} /></label>
-        <label>{text('Priority', 'Prioritas')}<select disabled={busy} value={draft.priority} onChange={event => setDraft({ ...draft, priority: event.target.value as Task['priority'] })}>{(['LOW', 'MEDIUM', 'HIGH'] as const).map(value => <option key={value} value={value}>{priorityLabel(value)}</option>)}</select></label>
-      </div>
-      <div className={styles.actions}><button type="button" disabled={busy} onClick={() => setDraft(null)}>{text('Cancel', 'Batal')}</button><button className="btn" disabled={busy || !draft.label.trim()}>{text('Save task', 'Simpan tugas')}</button></div>
-    </form>}
-    {loading ? <div aria-label={text('Loading tasks', 'Memuat tugas')} role="status" className={styles.skeleton}>{[0, 1, 2].map(key => <div key={key} />)}</div> : layout === 'calendar' ? (view === 'inbox' && rows.some(task => !task.due_date) && <div className={styles.undatedSection}><h3>{text('No date', 'Tanpa tanggal')}</h3><div className={styles.list}>{rows.filter(task => !task.due_date).map(task => <article key={task.id} className={styles.task}><input className={styles.check} type="checkbox" checked={task.done} disabled={busy} aria-label={`${text('Complete', 'Selesaikan')} ${task.label}`} onChange={() => void mutate(async () => { const saved = await request(`/api/todos/${task.id}`, 'PUT', { done: !task.done }); setTasks(current => current.map(row => row.id === task.id ? saved : row)); })} /><div className={styles.taskBody}><span className={task.done ? styles.done : ''}>{task.label}</span><small>{task.due_time && <><Clock size={12} /> {task.due_time.slice(0, 5)} · </>}{task.start_time && task.end_time && <><Clock size={12} /> {task.start_time.slice(0, 5)}–{task.end_time.slice(0, 5)} · </>}{task.start_time && !task.end_time && <><Clock size={12} /> {task.start_time.slice(0, 5)} · </>} {priorityLabel(task.priority)}</small></div><div className={styles.rowActions}><button disabled={busy} aria-label={`${text('Edit', 'Ubah')} ${task.label}`} onClick={() => setDraft({ id: task.id, label: task.label, priority: task.priority, due_date: task.due_date || '', due_time: task.due_time ? task.due_time.slice(0, 5) : '', start_time: task.start_time || '', end_time: task.end_time || '' })}><Pencil size={14} /></button><button disabled={busy} aria-label={`${text('Delete', 'Hapus')} ${task.label}`} onClick={() => void mutate(async () => { await request(`/api/todos/${task.id}`, 'DELETE'); setTasks(current => current.filter(row => row.id !== task.id)); if (draft?.id === task.id) setDraft(null); })}><Trash2 size={14} /></button></div></article>)}</div></div>) : view === 'timeline' ? null : <div className={layout === 'board' ? styles.board : styles.list}>{Array.from(groups, ([key, items]) => <section id={`day-${key}`} key={key} className={styles.group}>
+    {showTopEditor && renderEditor(draft)}
+    {loading ? <div aria-label={text('Loading tasks', 'Memuat tugas')} role="status" className={styles.skeleton}>{[0, 1, 2].map(key => <div key={key} />)}</div> : layout === 'calendar' ? (view === 'inbox' && rows.some(task => !task.due_date) && <div className={styles.undatedSection}><h3>{text('No date', 'Tanpa tanggal')}</h3><div className={styles.list}>{rows.filter(task => !task.due_date).map(task => <article key={task.id} className={`${styles.task} ${draft?.id === task.id ? styles.selected : ''}`}><input className={styles.check} type="checkbox" checked={task.done} aria-label={`${text('Complete', 'Selesaikan')} ${task.label}`} onChange={() => handleToggle(task)} /><div className={styles.taskBody} onClick={() => openEdit(task)}><span className={task.done ? styles.done : ''}>{task.label}</span><small>{task.due_time && <><Clock size={12} /> {task.due_time.slice(0, 5)} · </>}{task.start_time && task.end_time && <><Clock size={12} /> {task.start_time.slice(0, 5)}–{task.end_time.slice(0, 5)} · </>}{task.start_time && !task.end_time && <><Clock size={12} /> {task.start_time.slice(0, 5)} · </>} {priorityLabel(task.priority)}</small></div><div className={styles.rowActions}><button type="button" aria-label={`${text('Edit', 'Ubah')} ${task.label}`} onClick={() => openEdit(task)}><Pencil size={14} /></button><button type="button" aria-label={`${text('Delete', 'Hapus')} ${task.label}`} onClick={() => handleDelete(task.id)}><Trash2 size={14} /></button></div></article>)}</div></div>) : view === 'timeline' ? null : <div className={layout === 'board' ? styles.board : styles.list}>{Array.from(groups, ([key, items]) => <section id={`day-${key}`} key={key} className={styles.group}>
       {heading(key) && <h3 className={key === 'overdue' ? styles.overdue : ''}>{heading(key)}</h3>}
-      {items.map(task => <article key={task.id} className={styles.task}>
-        <input className={styles.check} type="checkbox" checked={task.done} disabled={busy} aria-label={`${text('Complete', 'Selesaikan')} ${task.label}`} onChange={() => void mutate(async () => { const saved = await request(`/api/todos/${task.id}`, 'PUT', { done: !task.done }); setTasks(current => current.map(row => row.id === task.id ? saved : row)); })} />
-        <div className={styles.taskBody}><span className={task.done ? styles.done : ''}>{task.label}</span><small className={task.due_date && task.due_date < today && !task.done ? styles.overdue : ''}>{task.due_date && <><CalendarDays size={12} /> {dateLabel(task.due_date)} · </>}{task.due_time && <><Clock size={12} /> {task.due_time.slice(0, 5)} · </>}{task.start_time && task.end_time && <><Clock size={12} /> {task.start_time.slice(0, 5)}–{task.end_time.slice(0, 5)} · </>}{task.start_time && !task.end_time && <><Clock size={12} /> {task.start_time.slice(0, 5)} · </>} {priorityLabel(task.priority)}</small></div>
-        <div className={styles.rowActions}><button disabled={busy} aria-label={`${text('Edit', 'Ubah')} ${task.label}`} onClick={() => setDraft({ id: task.id, label: task.label, priority: task.priority, due_date: task.due_date || '', due_time: task.due_time ? task.due_time.slice(0, 5) : '', start_time: task.start_time || '', end_time: task.end_time || '' })}><Pencil size={14} /></button><button disabled={busy} aria-label={`${text('Delete', 'Hapus')} ${task.label}`} onClick={() => void mutate(async () => { await request(`/api/todos/${task.id}`, 'DELETE'); setTasks(current => current.filter(row => row.id !== task.id)); if (draft?.id === task.id) setDraft(null); })}><Trash2 size={14} /></button></div>
-      </article>)}
+      {items.map(task => {
+        if (isInlineEditor && draft?.id === task.id) {
+          return renderEditor(draft);
+        }
+        return <article key={task.id} className={`${styles.task} ${draft?.id === task.id ? styles.selected : ''}`}>
+          <input className={styles.check} type="checkbox" checked={task.done} aria-label={`${text('Complete', 'Selesaikan')} ${task.label}`} onChange={() => handleToggle(task)} />
+          <div className={styles.taskBody} onClick={() => openEdit(task)}><span className={task.done ? styles.done : ''}>{task.label}</span><small className={task.due_date && task.due_date < today && !task.done ? styles.overdue : ''}>{task.due_date && <><CalendarDays size={12} /> {dateLabel(task.due_date)} · </>}{task.due_time && <><Clock size={12} /> {task.due_time.slice(0, 5)} · </>}{task.start_time && task.end_time && <><Clock size={12} /> {task.start_time.slice(0, 5)}–{task.end_time.slice(0, 5)} · </>}{task.start_time && !task.end_time && <><Clock size={12} /> {task.start_time.slice(0, 5)} · </>} {priorityLabel(task.priority)}</small></div>
+          <div className={styles.rowActions}><button type="button" aria-label={`${text('Edit', 'Ubah')} ${task.label}`} onClick={() => openEdit(task)}><Pencil size={14} /></button><button type="button" aria-label={`${text('Delete', 'Hapus')} ${task.label}`} onClick={() => handleDelete(task.id)}><Trash2 size={14} /></button></div>
+        </article>;
+      })}
       {!items.length && key === 'all' && <p className={styles.empty}>{text('No tasks in this view.', 'Tidak ada tugas dalam tampilan ini.')}</p>}
       <button className={styles.add} disabled={loading || busy || (view !== 'inbox' && !dates)} onClick={() => openAdd(/^\d{4}-/.test(key) ? key : view === 'today' ? today : '')}><Plus size={16} />{text('Add task', 'Tambah tugas')}</button>
     </section>)}</div>}
