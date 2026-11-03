@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { KeyRound, ShieldCheck } from 'lucide-react';
+import { ChevronDown, KeyRound, ShieldCheck } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { aiProviders, defaultAiConfig, isAiProvider, type AiConfig, type AiProviderId } from '@/lib/ai-config';
 
@@ -181,11 +181,14 @@ function AiProviderForm({ lang }: { lang: 'en' | 'id' }) {
   const providerEntries = (['openai', 'anthropic', '9router', 'hermes'] as AiProviderId[]).map((providerId) => [providerId, aiProviders[providerId]] as const);
   const providerName = aiProviders[config.provider]?.label ?? config.provider;
 
-  return <section className="card aiSettingsCard aiConnectionCard" aria-labelledby="ai-settings-title">
-    <div className="settingsSectionHeader">
+  return <details className="card aiSettingsCard aiConnectionCard collapsibleCard" open aria-labelledby="ai-settings-title">
+    <summary className="settingsSectionHeader">
       <div><span className="pill">AI & API</span><h2 id="ai-settings-title">{id ? 'Koneksi AI' : 'AI connection'}</h2><p className="muted noMargin">{id ? 'Atur provider, model, base URL, dan API key langsung di sini.' : 'Set provider, model, base URL, and API key directly here.'}</p></div>
-      <KeyRound size={21} aria-hidden="true" />
-    </div>
+      <span className="collapseToggle">
+        <KeyRound size={21} aria-hidden="true" />
+        <ChevronDown size={18} className="collapseChevron" aria-hidden="true" />
+      </span>
+    </summary>
 <div className={`aiConnectionStatus ${connectionState}`} role="status"><span className="aiStatusDot" aria-hidden="true" />{connectionState === "connected" ? (id ? `Terhubung · ${providerName}` : `Connected · ${providerName}`) : connectionState === "error" ? (id ? "Koneksi gagal" : "Connection failed") : (id ? "Belum terhubung" : "Not connected")}</div>
     <form className="aiDirectForm" onSubmit={handleSave}>
       <div className="settingsField">
@@ -212,5 +215,5 @@ function AiProviderForm({ lang }: { lang: 'en' | 'id' }) {
       {notice && <p className="aiWizardNotice" role="status" aria-live="polite">{notice}</p>}
     </form>
     <p className="aiSecurityNote"><ShieldCheck size={16} aria-hidden="true" />{id ? 'Key dienkripsi di desktop, hanya di memori browser, diteruskan melalui server ke provider; tidak disimpan di database aplikasi.' : 'Keys are encrypted on desktop, memory-only in browsers, relayed through the server to your provider, and not stored in the app database.'}</p>
-  </section>;
+  </details>;
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { Info } from 'lucide-react';
+import { ChevronDown, Info } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 type UpdateState = {
@@ -78,16 +78,19 @@ export function AppInfoSettings({ lang }: { lang: 'en' | 'id' }) {
     : state.status === 'downloaded' ? (id ? `v${state.version} siap. Simpan pekerjaan sebelum restart.` : `v${state.version} ready. Save your work before restarting.`)
     : state.status === 'unsupported' ? (id ? 'Update tersedia melalui aplikasi desktop.' : 'Updates are available in the desktop app.') : '';
 
-  return <section className="card appInfoCard" aria-labelledby="app-info-title">
-    <div className="settingsSectionHeader">
+  return <details className="card appInfoCard collapsibleCard" open aria-labelledby="app-info-title">
+    <summary className="settingsSectionHeader">
       <div><span className="pill">{id ? 'Informasi' : 'Info'}</span><h2 id="app-info-title">{id ? 'Informasi Aplikasi' : 'App Information'}</h2><p className="muted noMargin">{id ? 'Detail versi dan pembaruan aplikasi.' : 'Version details and app updates.'}</p></div>
-      <Info size={21} aria-hidden="true" />
-    </div>
+      <span className="collapseToggle">
+        <Info size={21} aria-hidden="true" />
+        <ChevronDown size={18} className="collapseChevron" aria-hidden="true" />
+      </span>
+    </summary>
     <div className="appInfoRow">
       <div><strong>{id ? 'Versi' : 'Version'}</strong><p className="muted noMargin" style={{ fontSize: '12px' }}>{version ? `Life OS v${version}` : (id ? 'Versi desktop belum tersedia' : 'Desktop version unavailable')}</p></div>
       <button type="button" className="btn ghost" disabled={busy || checking || downloading || state.status === 'unsupported'} onClick={() => void update()}>{label}</button>
     </div>
     <div role="status" aria-live="polite">{message && <p className="muted" style={{ fontSize: '12px', padding: '8px 10px', background: 'var(--surface2)', borderRadius: '8px', margin: '6px 0 0' }}>{message}</p>}</div>
     {downloading && <progress max={100} value={state.percent || 0} aria-label={id ? 'Progres unduhan update' : 'Update download progress'} style={{ width: '100%' }} />}
-  </section>;
+  </details>;
 }

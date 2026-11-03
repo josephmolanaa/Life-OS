@@ -68,8 +68,11 @@ export function DuckiesSettings({ lang }: { lang: 'id' | 'en' }) {
   const summary = !allowed ? (id ? 'Semua aplikasi' : 'All apps') : `${allowed.length} ${id ? 'aplikasi dipilih' : 'apps selected'}`;
   const filterDisabled = busy || !desktop || !settings.notifications;
 
-  return <section className="card duckiesSettings">
-    <div className="settingsSectionHeader"><div><span className="pill">Duckies</span><h2>Floating widget</h2><p className="muted noMargin">{desktop ? (id ? 'Widget desktop di atas layar.' : 'Desktop overlay above your screen.') : (id ? 'Aktifkan dari aplikasi desktop.' : 'Enable it from the desktop app.')}</p></div></div>
+  return <details className="card duckiesSettings collapsibleCard" open>
+    <summary className="settingsSectionHeader">
+      <div><span className="pill">Duckies</span><h2>Floating widget</h2><p className="muted noMargin">{desktop ? (id ? 'Widget desktop di atas layar.' : 'Desktop overlay above your screen.') : (id ? 'Aktifkan dari aplikasi desktop.' : 'Enable it from the desktop app.')}</p></div>
+      <span className="collapseToggle"><ChevronDown size={18} className="collapseChevron" aria-hidden="true" /></span>
+    </summary>
     <div className="settingsStack">
       {toggle('enabled', id ? 'Aktifkan Duckies' : 'Enable Duckies', id ? 'Tampilkan widget floating saat desktop dibuka.' : 'Show the floating widget when desktop starts.')}
       {toggle('notifications', id ? 'Notifikasi Duckies' : 'Duckies notifications', id ? 'Island membesar sebentar saat fokus selesai, tugas beres, atau target air tercapai.' : 'The island expands briefly when focus ends, a task is done, or the water goal is hit.')}
@@ -101,7 +104,7 @@ export function DuckiesSettings({ lang }: { lang: 'id' | 'en' }) {
         </label>}
       </fieldset>
     </div>
-  </section>;
+  </details>;
 }
 
 declare global {
