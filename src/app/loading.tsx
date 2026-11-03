@@ -30,6 +30,7 @@ export default function Loading() {
   if (pathname === '/study/rps') return <PageLoading title="RPS (Rencana Pembelajaran Semester)" variant="rps" />;
   if (pathname === '/study') return <PageLoading title="Study Hub" variant="study" />;
   if (pathname === '/settings') return <PageLoading title="Settings" variant="settings" />;
+  if (pathname === '/ideas' || pathname.startsWith('/ideas/')) return <PageLoading title="Ideas & Inversion" variant="dashboard" />;
   if (pathname === '/' || pathname === '/dashboard') return <PageLoading title="Dashboard" variant="home" />;
   return <div role="status" aria-busy="true" className="authLoading">Loading…</div>;
 }
